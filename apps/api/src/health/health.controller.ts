@@ -1,5 +1,7 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
+import type { PrismaClient } from '@prisma/client';
+import { SYSTEM_PRISMA } from '../prisma/system-prisma.token';
+import { Public } from '../auth/public.decorator';
 
 /**
  * Slice-1 liveness/readiness probes (task 1.4).
@@ -9,18 +11,20 @@ import { PrismaClient } from '@prisma/client';
  *   handshake via `$connect()`, i.e. a real DB ping without touching raw SQL
  *   (Raw-SQL ban, spec Cap 3). The boss-ping addition lands with slice 6.
  *
- * The throwaway `PrismaClient` instance here is scaffold-grade on purpose;
- * slice 2 (task 2.2) replaces it with the global PrismaModule provider.
+ * Health is one of the whitelisted SYSTEM_PRISMA consumers (task 2.2); the
+ * throwaway client from the S1 scaffold is gone.
  */
 @Controller()
 export class HealthController {
-  private readonly prisma = new PrismaClient();
+  constructor(@Inject(SYSTEM_PRISMA) private readonly prisma: PrismaClient) {}
 
+  @Public()
   @Get('healthz')
   liveness(): { status: 'ok' } {
     return { status: 'ok' };
   }
 
+  @Public()
   @Get('readyz')
   async readiness(): Promise<{ status: string; db: string }> {
     try {

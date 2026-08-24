@@ -27,4 +27,32 @@ export default tseslint.config(
     files: ['apps/api/src/**/*.ts'],
     rules: { ...rawSqlBanRule },
   },
+  {
+    // SYSTEM_PRISMA whitelist (task 2.2): only system modules may import the
+    // raw-client token. Everything else goes through the tenancy-scoped data
+    // layer. prisma/* infrastructure and the whitelisted consumers are exempt.
+    files: ['apps/api/src/**/*.ts'],
+    ignores: [
+      'apps/api/src/prisma/**',
+      'apps/api/src/auth/**',
+      'apps/api/src/magic-links/**',
+      'apps/api/src/mailer/**',
+      'apps/api/src/jobs/**',
+      'apps/api/src/health/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/prisma/system-prisma.token', '**/prisma/system-prisma.token.*'],
+              message:
+                'SYSTEM_PRISMA is restricted to Auth, MagicLinks, Mailer, Jobs and Health modules.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
