@@ -18,7 +18,7 @@ export const rawSqlBanRule = {
 };
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/coverage/**'] },
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/.next/**', '**/coverage/**', '**/next-env.d.ts'] },
   tseslint.configs.recommended,
   {
     files: ['apps/api/src/**/*.ts'],
