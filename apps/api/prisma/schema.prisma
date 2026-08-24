@@ -1,5 +1,8 @@
-// Slice 1 scaffold stub: generator + datasource wiring only.
-// Task 1.3 replaces this file with the complete data model per design §1.
+// Design §1 — complete data model.
+// Scope conventions: every tenanted row carries denormalized `agencyId`; child
+// review-surface rows also carry `clientId` so the tenancy extension (design §3)
+// injects flat scalar where-clauses uniformly.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,4 +10,349 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ---- enums ----
+
+enum StaffRole {
+  SUPER_ADMIN
+  ACCOUNT_MANAGER
+  CREATIVE
+}
+
+enum SessionKind {
+  STAFF
+  CLIENT
+}
+
+enum CreativeKind {
+  IMAGE
+  VIDEO
+  TEXT
+}
+
+// UPLOAD_FAILED is staff-visible only (spec amendment 2026-08-24).
+enum CreativeStatus {
+  DRAFT
+  PROCESSING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  UPLOAD_FAILED
+}
+
+enum VersionState {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ReviewStatus {
+  NONE
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+enum CommentAnchor {
+  PLAIN
+  PIN
+  RANGE
+}
+
+enum ActorType {
+  STAFF
+  CLIENT
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  REQUEST_CHANGES
+}
+
+enum EmailTemplate {
+  VERSION_NEW
+  COMMENT_NEW
+  DECISION_CAST
+  APPROVAL_REMINDER
+  WEEKLY_DIGEST
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+  HANDLED
+}
+
+// ---- tenancy root ----
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users            User[]
+  clients          Client[]
+  campaigns        Campaign[]
+  creatives        Creative[]
+  assets           Asset[]
+  magicLinks       MagicLink[]
+  sessions         Session[]
+  emails           EmailMessage[]
+  creativeVersions CreativeVersion[]
+}
+
+// ---- identity ----
+
+model User {
+  id           String    @id @default(cuid())
+  agencyId     String
+  email        String    @unique
+  passwordHash String // argon2id
+  displayName  String // actor label in audit trail
+  role         StaffRole
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  agency            Agency        @relation(fields: [agencyId], references: [id])
+  sessions          Session[]
+  reviewEvents      ReviewEvent[]
+  comments          Comment[]
+  createdMagicLinks MagicLink[]   @relation("LinkCreator")
+  creatives         Creative[]
+
+  @@index([agencyId])
+}
+
+model Session {
+  id          String      @id @default(cuid())
+  tokenHash   String      @unique // sha256(cookie value)
+  kind        SessionKind
+  agencyId    String
+  userId      String? // STAFF
+  magicLinkId String? // CLIENT — FK drives cascade revocation
+  clientId    String? // CLIENT composite scope
+  csrfSecret  String // per-session secret for csrf-csrf
+  expiresAt   DateTime // absolute TTL, default 7d (SESSION_TTL_DAYS)
+  revokedAt   DateTime?
+  createdAt   DateTime    @default(now())
+
+  user      User?      @relation(fields: [userId], references: [id])
+  magicLink MagicLink? @relation(fields: [magicLinkId], references: [id])
+  agency    Agency     @relation(fields: [agencyId], references: [id])
+
+  @@index([magicLinkId])
+  @@index([expiresAt])
+}
+
+model MagicLink {
+  id             String    @id @default(cuid())
+  agencyId       String
+  clientId       String
+  recipientEmail String
+  tokenHash      String    @unique // sha256(rawToken) — RAW TOKEN IS NEVER STORED
+  createdById    String
+  expiresAt      DateTime? // null = persistent until revoked (locked default)
+  revokedAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  agency    Agency    @relation(fields: [agencyId], references: [id])
+  client    Client    @relation(fields: [clientId], references: [id])
+  createdBy User      @relation("LinkCreator", fields: [createdById], references: [id])
+  sessions  Session[]
+
+  @@index([clientId])
+}
+
+// ---- hierarchy ----
+
+model Client {
+  id        String   @id @default(cuid())
+  agencyId  String
+  name      String
+  contact   String?
+  createdAt DateTime @default(now())
+
+  agency           Agency            @relation(fields: [agencyId], references: [id])
+  campaigns        Campaign[]
+  creatives        Creative[]
+  magicLinks       MagicLink[]
+  creativeVersions CreativeVersion[]
+
+  @@index([agencyId])
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  agencyId  String
+  clientId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  client    Client     @relation(fields: [clientId], references: [id])
+  agency    Agency     @relation(fields: [agencyId], references: [id])
+  creatives Creative[]
+
+  @@index([agencyId, clientId])
+}
+
+model Creative {
+  id          String         @id @default(cuid())
+  agencyId    String
+  clientId    String
+  campaignId  String
+  title       String
+  kind        CreativeKind // fixed at creation; gates comment anchors
+  status      CreativeStatus @default(DRAFT) // ROLLUP — derived SOLELY from latest version, updated in-tx
+  createdById String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  client    Client            @relation(fields: [clientId], references: [id])
+  campaign  Campaign          @relation(fields: [campaignId], references: [id])
+  agency    Agency            @relation(fields: [agencyId], references: [id])
+  createdBy User              @relation(fields: [createdById], references: [id])
+  versions  CreativeVersion[]
+
+  @@index([agencyId, clientId])
+  @@index([campaignId])
+}
+
+// ---- content-addressed binaries ----
+
+// NOTE: no monetary/spend/impression columns ANYWHERE — ads metrics are Phase 2;
+// currency-free MVP is contractual. Phase-2 API-key pattern reserved (not modeled).
+
+model Asset {
+  id         String   @id @default(cuid())
+  agencyId   String
+  sha256     String   @unique // content address = dedup key
+  mime       String // sniffed truth, not claimed MIME
+  byteSize   BigInt
+  storageKey String // "assets/{sha256}"
+  refCount   Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  agency   Agency            @relation(fields: [agencyId], references: [id])
+  versions CreativeVersion[] @relation("VersionAsset")
+  posters  CreativeVersion[] @relation("VersionPoster")
+
+  @@index([agencyId])
+}
+
+model CreativeVersion {
+  id              String       @id @default(cuid())
+  creativeId      String
+  versionNo       Int // monotonic, UNIQUE per creative
+  agencyId        String // denormalized scope
+  clientId        String // denormalized scope
+  assetId         String? // null for pasted TEXT
+  posterAssetId   String? // video poster (an image Asset)
+  textBody        String?      @db.Text // TEXT paste (no asset, no worker pass)
+  state           VersionState @default(PROCESSING)
+  failReason      String?
+  durationMs      Int?
+  reviewStatus    ReviewStatus @default(NONE)
+  reviewStartedAt DateTime? // set on PROCESSING→READY (reminder baseline)
+  lastReminderAt  DateTime?
+  createdAt       DateTime     @default(now())
+
+  creative     Creative      @relation(fields: [creativeId], references: [id])
+  agency       Agency        @relation(fields: [agencyId], references: [id])
+  client       Client        @relation(fields: [clientId], references: [id])
+  asset        Asset?        @relation("VersionAsset", fields: [assetId], references: [id])
+  poster       Asset?        @relation("VersionPoster", fields: [posterAssetId], references: [id])
+  comments     Comment[]
+  reviewEvents ReviewEvent[]
+
+  @@unique([creativeId, versionNo]) // DB-level monotonic uniqueness → 409
+  @@index([creativeId, state])
+  @@index([state, reviewStatus]) // reminder-scan query
+}
+
+// ---- append-only audit ----
+
+model Comment {
+  id           String        @id @default(cuid())
+  versionId    String
+  agencyId     String
+  clientId     String
+  authorType   ActorType
+  authorUserId String?
+  authorLabel  String // display snapshot
+  anchor       CommentAnchor // mirrors payload.kind for querying
+  posX         Int? // basis points 0..10000
+  posY         Int?
+  startMs      Int?
+  endMs        Int?
+  body         String        @db.Text
+  createdAt    DateTime      @default(now()) // append-only: NO update/delete routes exist
+
+  version    CreativeVersion @relation(fields: [versionId], references: [id])
+  authorUser User?           @relation(fields: [authorUserId], references: [id])
+
+  @@index([versionId, createdAt])
+}
+
+model ReviewEvent {
+  id          String         @id @default(cuid())
+  versionId   String
+  agencyId    String
+  clientId    String
+  decision    ReviewDecision
+  actorType   ActorType
+  actorUserId String?
+  actorLabel  String
+  commentId   String?
+  occurredAt  DateTime       @default(now()) // UTC ISO-8601
+
+  version   CreativeVersion @relation(fields: [versionId], references: [id])
+  actorUser User?           @relation(fields: [actorUserId], references: [id])
+
+  @@unique([versionId]) // PERSISTENCE-LEVEL single binding: 1st decision wins; P2002 → 409 DECISION_ALREADY_CAST
+}
+
+// ---- notifications ----
+
+model EmailMessage {
+  id               String        @id @default(cuid())
+  agencyId         String
+  template         EmailTemplate
+  status           EmailStatus   @default(QUEUED)
+  dedupeKey        String?       @unique // handler idempotency (at-least-once → effectively-once)
+  toAddresses      String[]
+  subject          String
+  bodyText         String        @db.Text // SEALED at rest via MAIL_SEAL_KEY
+  bodyHtml         String        @db.Text
+  relatedVersionId String?
+  relatedClientId  String?
+  attempts         Int           @default(0)
+  error            String?
+  sentAt           DateTime?
+  failedAt         DateTime?
+  handledAt        DateTime? // manual-copy dismissal
+  createdAt        DateTime      @default(now())
+  agency           Agency        @relation(fields: [agencyId], references: [id])
+
+  @@index([agencyId, status])
+}
+
+// Brute-force throttle (Cap 1)
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  emailLower  String
+  attemptedAt DateTime @default(now())
+
+  @@index([emailLower, attemptedAt])
+}
+
+// last_digest_at + misc kv
+model SystemState {
+  key       String   @id
+  valueJson Json
+  updatedAt DateTime @updatedAt
 }
