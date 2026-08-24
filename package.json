@@ -7,6 +7,7 @@
   },
   "scripts": {
     "lint": "eslint . --max-warnings=0",
+    "lint:meta": "node tools/scripts/lint-meta.mjs",
     "typecheck": "tsc -b",
     "build": "pnpm -r build",
     "test": "pnpm -r test"
