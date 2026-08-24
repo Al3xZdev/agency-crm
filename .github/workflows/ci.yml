@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      # Web is typechecked by its own project (Next.js owns its tsconfig);
+      # tsc -b covers packages/shared + apps/api composite graph.
+      - run: pnpm --filter @agency-crm/web exec tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm --filter @agency-crm/api db:generate
+      - run: pnpm --filter @agency-crm/web build
+      - run: pnpm -r test
+
+  integration-migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: agency
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://app:app@localhost:5432/agency
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      # Proves the init migration (schema + append-only triggers) applies cleanly.
+      - run: pnpm --filter @agency-crm/api db:migrate

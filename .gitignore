@@ -1,2 +1,24 @@
 # SDD working artifacts (local cache, not source of truth)
 .atl/
+.engram/
+
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+
+# OS noise
+Thumbs.db
+.DS_Store
