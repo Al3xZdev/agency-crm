@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
+import { TenancyModule } from './tenancy/tenancy.module';
 import { SessionGuard } from './auth/session.guard';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -17,7 +18,7 @@ import { ContextInterceptor } from './auth/context.interceptor';
  * interceptor is what scopes the principal for controllers and services.
  */
 @Module({
-  imports: [ConfigModule, PrismaModule, HealthModule, AuthModule, StaffModule],
+  imports: [ConfigModule, PrismaModule, TenancyModule, HealthModule, AuthModule, StaffModule],
   providers: [
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: CsrfGuard },

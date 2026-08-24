@@ -34,6 +34,7 @@ export default tseslint.config(
     files: ['apps/api/src/**/*.ts'],
     ignores: [
       'apps/api/src/prisma/**',
+      'apps/api/src/tenancy/**',
       'apps/api/src/auth/**',
       'apps/api/src/magic-links/**',
       'apps/api/src/mailer/**',
@@ -48,7 +49,7 @@ export default tseslint.config(
             {
               group: ['**/prisma/system-prisma.token', '**/prisma/system-prisma.token.*'],
               message:
-                'SYSTEM_PRISMA is restricted to Auth, MagicLinks, Mailer, Jobs and Health modules.',
+                'SYSTEM_PRISMA is restricted to Tenancy, Auth, MagicLinks, Mailer, Jobs and Health modules.',
             },
           ],
         },
