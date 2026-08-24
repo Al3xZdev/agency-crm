@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+# Production image shared by the `api` and `worker` compose services (design §10).
+# Dev-dependency pruning in the runtime layer is deferred until this image can be
+# exercised on a Docker-capable host (Docker absent on the current dev machine).
+
+FROM node:22-alpine AS base
+RUN corepack enable
+WORKDIR /app
+
+FROM base AS deps
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY apps/api/package.json apps/api/package.json
+RUN pnpm install --frozen-lockfile --filter @agency-crm/api...
+
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages ./packages
+COPY --from=deps /app/apps ./apps
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+RUN pnpm --filter @agency-crm/shared build \
+ && pnpm --filter @agency-crm/api exec prisma generate \
+ && pnpm --filter @agency-crm/api build
+
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/shared ./packages/shared
+COPY --from=build /app/apps/api ./apps/api
+WORKDIR /app/apps/api
+EXPOSE 3000
+CMD ["node", "dist/main.js"]

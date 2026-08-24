@@ -1,0 +1,88 @@
+name: agency-crm
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agency}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agency_crm}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "${DB_PORT:-5432}:5432"
+
+  # One-shot migration runner (design §10): applies prisma migrations, then exits.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["node", "/app/node_modules/prisma/build/index.js", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      PORT: 3000
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      LOCAL_STORAGE_PATH: ${LOCAL_STORAGE_PATH:-/app/assets}
+    volumes:
+      - assets:${LOCAL_STORAGE_PATH:-/app/assets}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Same image as api, worker-only bootstrap (design §10).
+  # Placeholder heartbeat until slice 6 ships main-worker bootstrap (task 6.5).
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["node", "-e", "setInterval(() => {}, 2147483647)"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      REMINDERS_DISABLED: ${REMINDERS_DISABLED:-false}
+      DIGEST_DISABLED: ${DIGEST_DISABLED:-false}
+    volumes:
+      - assets:${LOCAL_STORAGE_PATH:-/app/assets}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      INTERNAL_API_URL: http://api:3000
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    ports:
+      - "${WEB_PORT:-3001}:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  assets:
