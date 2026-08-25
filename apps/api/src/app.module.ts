@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
@@ -10,6 +10,7 @@ import { SessionGuard } from './auth/session.guard';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ContextInterceptor } from './auth/context.interceptor';
+import { AllExceptionsFilter } from './common/http-exception.filter';
 
 /**
  * Global gate order (spec Cap 1 / Cap 3):
@@ -20,6 +21,7 @@ import { ContextInterceptor } from './auth/context.interceptor';
 @Module({
   imports: [ConfigModule, PrismaModule, TenancyModule, HealthModule, AuthModule, StaffModule],
   providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
