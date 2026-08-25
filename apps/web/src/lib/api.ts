@@ -30,5 +30,11 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
       headers.set('X-CSRF-Token', token);
     }
   }
-  return fetch(url, { ...init, headers, credentials: 'same-origin' });
+  return fetch(url, {
+    ...init,
+    headers,
+    credentials: 'same-origin',
+    // Magic-link URLs live in page paths; never echo them in Referer.
+    referrerPolicy: 'no-referrer',
+  });
 }
