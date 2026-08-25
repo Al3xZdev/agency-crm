@@ -30,3 +30,27 @@ export const createCreativeSchema = z.object({
   kind: z.enum(['IMAGE', 'VIDEO', 'TEXT']),
 });
 export type CreateCreativeDto = z.infer<typeof createCreativeSchema>;
+
+export const createCommentSchema = z
+  .object({
+    anchor: z.enum(['PLAIN', 'PIN', 'RANGE']),
+    posX: z.number().min(0).max(10000).optional(),
+    posY: z.number().min(0).max(10000).optional(),
+    startMs: z.number().min(0).optional(),
+    endMs: z.number().min(0).optional(),
+    body: z.string().min(1).max(5000),
+  })
+  .refine(
+    (data) => {
+      if (data.anchor === 'PIN') return data.posX !== undefined && data.posY !== undefined;
+      if (data.anchor === 'RANGE') return data.startMs !== undefined && data.endMs !== undefined;
+      return true;
+    },
+    { message: 'PIN requires posX and posY; RANGE requires startMs and endMs' },
+  );
+export type CreateCommentDto = z.infer<typeof createCommentSchema>;
+
+export const castDecisionSchema = z.object({
+  decision: z.enum(['APPROVED', 'REJECTED', 'REQUEST_CHANGES']),
+});
+export type CastDecisionDto = z.infer<typeof castDecisionSchema>;

@@ -33,7 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       res.status(exception.getStatus()).json(exception.getResponse());
       return;
     }
-    if (exception instanceof ZodError) {
+    if (exception instanceof ZodError || (exception instanceof Error && exception.name === 'ZodError')) {
       res.status(400).json({ statusCode: 400, message: 'VALIDATION_ERROR' });
       return;
     }

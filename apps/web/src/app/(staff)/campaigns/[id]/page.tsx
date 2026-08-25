@@ -85,7 +85,9 @@ export default function CampaignDetailPage() {
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {(creatives.data ?? []).map((c) => (
             <li key={c.id} style={{ padding: '8px 0', borderBottom: '1px solid #eee' }}>
-              <span style={{ fontWeight: 600 }}>{c.title}</span>{' '}
+              <Link href={`/creatives/${c.id}`} style={{ fontWeight: 600 }}>
+                {c.title}
+              </Link>{' '}
               <span style={{ color: '#666' }}>
                 · {c.kind} · {c.status}
               </span>{' '}
