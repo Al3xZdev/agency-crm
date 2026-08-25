@@ -4,15 +4,18 @@ import { SYSTEM_PRISMA } from '../prisma/system-prisma.token';
 import { Public } from '../auth/public.decorator';
 
 /**
- * Slice-1 liveness/readiness probes (task 1.4).
+ * Slice-1 liveness/readiness probes (task 1.4), hardened per the slice-3.5
+ * audit:
  *
  * - `GET /healthz` — pure liveness: process is up, no external checks.
- * - `GET /readyz`  — readiness: performs a genuine PostgreSQL connection
- *   handshake via `$connect()`, i.e. a real DB ping without touching raw SQL
- *   (Raw-SQL ban, spec Cap 3). The boss-ping addition lands with slice 6.
+ * - `GET /readyz`  — readiness: a real `SELECT 1` round-trip. The raw-SQL
+ *   ban (spec Cap 3) carries a deliberate, commented exemption for this
+ *   probe in eslint.config.mjs — health checks are exactly where a
+ *   parameterized one-liner belongs. The previous `$connect/$disconnect`
+ *   version tore down the connection pool on every probe (audit finding 4).
+ *   The boss-ping addition lands with slice 6.
  *
- * Health is one of the whitelisted SYSTEM_PRISMA consumers (task 2.2); the
- * throwaway client from the S1 scaffold is gone.
+ * Health is one of the whitelisted SYSTEM_PRISMA consumers (task 2.2).
  */
 @Controller()
 export class HealthController {
@@ -28,12 +31,10 @@ export class HealthController {
   @Get('readyz')
   async readiness(): Promise<{ status: string; db: string }> {
     try {
-      await this.prisma.$connect();
+      await this.prisma.$queryRaw`SELECT 1`;
       return { status: 'ok', db: 'up' };
     } catch {
       throw new ServiceUnavailableException({ status: 'error', db: 'down' });
-    } finally {
-      await this.prisma.$disconnect().catch(() => undefined);
     }
   }
 }

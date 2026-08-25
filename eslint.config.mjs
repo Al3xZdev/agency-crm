@@ -25,6 +25,10 @@ export default tseslint.config(
   tseslint.configs.recommended,
   {
     files: ['apps/api/src/**/*.ts'],
+    // Sole exemption (slice-3.5 audit, finding 4): /readyz performs a
+    // constant `SELECT 1` probe. Health checks are the one legitimate
+    // parameterized raw-SQL consumer; anything else must use the scoped layer.
+    ignores: ['apps/api/src/health/**'],
     rules: { ...rawSqlBanRule },
   },
   {
