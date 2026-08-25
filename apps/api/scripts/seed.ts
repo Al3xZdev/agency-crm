@@ -23,7 +23,7 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaClient();
   try {
-    const result = await ensureInitialAdmin(prisma.user, { email, password }, hash);
+    const result = await ensureInitialAdmin(prisma.user, { email, password }, hash, prisma.agency);
     console.log(
       result.created
         ? `seed: created initial SUPER_ADMIN ${email}`

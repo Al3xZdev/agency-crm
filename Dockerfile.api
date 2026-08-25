@@ -11,7 +11,7 @@ FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY apps/api/package.json apps/api/package.json
-RUN pnpm install --frozen-lockfile --filter @agency-crm/api...
+RUN pnpm install --frozen-lockfile
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
@@ -34,6 +34,8 @@ RUN addgroup -S app && adduser -S app -G app \
  && chown -R app:app /app/assets
 ENV NODE_ENV=production
 COPY --from=build --chown=app:app /app/node_modules ./node_modules
+# Workspace root files needed for `pnpm --filter exec` in migrate commands.
+COPY --from=build --chown=app:app /app/pnpm-workspace.yaml /app/package.json /app/pnpm-lock.yaml ./
 COPY --from=build --chown=app:app /app/packages/shared ./packages/shared
 COPY --from=build --chown=app:app /app/apps/api ./apps/api
 USER app

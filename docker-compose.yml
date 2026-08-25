@@ -15,14 +15,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    # Loopback-only by default (audit finding 9): the app talks to the db over
-    # the internal network; host access is for admin tooling, not the LAN.
+    # Loopback-only by default: the app talks to the db over the internal
+    # network; host access is for admin tooling, not the LAN.
     ports:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
 
-  # One-shot migration runner (design §10): applies prisma migrations, then
-  # optionally bootstraps the first SUPER_ADMIN when SEED_ADMIN_* is set,
-  # then exits.
+  # One-shot migration runner: applies prisma migrations, then optionally
+  # bootstraps the first SUPER_ADMIN when SEED_ADMIN_* is set, then exits.
   migrate:
     build:
       context: .
@@ -69,8 +68,7 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  # Same image as api, worker-only bootstrap (design §10).
-  # Placeholder heartbeat until slice 6 ships main-worker bootstrap (task 6.5).
+  # Placeholder heartbeat until slice 6 ships main-worker bootstrap.
   worker:
     build:
       context: .

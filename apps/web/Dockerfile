@@ -4,11 +4,12 @@
 FROM node:22-alpine AS build
 RUN corepack enable
 WORKDIR /app
-ENV WEB_STANDALONE=1 NEXT_TELEMETRY_DISABLED=1
+ARG INTERNAL_API_URL=http://api:3000
+ENV WEB_STANDALONE=1 NEXT_TELEMETRY_DISABLED=1 INTERNAL_API_URL=${INTERNAL_API_URL}
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --frozen-lockfile --filter @agency-crm/web...
+RUN pnpm install --frozen-lockfile
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 RUN pnpm --filter @agency-crm/shared build \
