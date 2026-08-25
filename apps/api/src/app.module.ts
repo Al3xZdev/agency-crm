@@ -6,11 +6,13 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StaffModule } from './staff/staff.module';
 import { TenancyModule } from './tenancy/tenancy.module';
+import { MagicLinksModule } from './magic-links/magic-links.module';
 import { SessionGuard } from './auth/session.guard';
 import { CsrfGuard } from './auth/csrf.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { ContextInterceptor } from './auth/context.interceptor';
 import { AllExceptionsFilter } from './common/http-exception.filter';
+import { AppHeadersModule } from './common/app-headers.module';
 
 /**
  * Global gate order (spec Cap 1 / Cap 3):
@@ -19,7 +21,7 @@ import { AllExceptionsFilter } from './common/http-exception.filter';
  * interceptor is what scopes the principal for controllers and services.
  */
 @Module({
-  imports: [ConfigModule, PrismaModule, TenancyModule, HealthModule, AuthModule, StaffModule],
+  imports: [ConfigModule, PrismaModule, TenancyModule, AppHeadersModule, HealthModule, AuthModule, MagicLinksModule, StaffModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: SessionGuard },

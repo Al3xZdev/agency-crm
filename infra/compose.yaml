@@ -43,6 +43,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:3001}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       LOCAL_STORAGE_PATH: ${LOCAL_STORAGE_PATH:-/app/assets}
     volumes:

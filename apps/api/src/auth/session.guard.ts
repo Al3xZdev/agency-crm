@@ -50,28 +50,50 @@ export class SessionGuard implements CanActivate {
     const tokenHash = createHash('sha256').update(raw).digest('hex');
     const session = await this.prisma.session.findUnique({
       where: { tokenHash },
-      include: { user: true },
+      include: { user: true, magicLink: true },
     });
-    if (
+    const expired =
       !session ||
       session.revokedAt !== null ||
-      session.expiresAt.getTime() <= Date.now() ||
-      session.kind !== 'STAFF' ||
-      !session.user?.isActive
-    ) {
-      throw new UnauthorizedException();
+      session.expiresAt.getTime() <= Date.now();
+
+    if (!expired && session.kind === 'STAFF') {
+      if (!session.user?.isActive) throw new UnauthorizedException();
+      req.__requestContext = {
+        principal: {
+          kind: 'STAFF',
+          agencyId: session.agencyId,
+          sessionId: session.id,
+          userId: session.userId ?? undefined,
+          role: session.user.role,
+        },
+        csrfSecret: session.csrfSecret,
+      };
+      return true;
     }
 
-    req.__requestContext = {
-      principal: {
-        kind: 'STAFF',
-        agencyId: session.agencyId,
-        sessionId: session.id,
-        userId: session.userId ?? undefined,
-        role: session.user.role,
-      },
-      csrfSecret: session.csrfSecret,
-    };
-    return true;
+    if (!expired && session.kind === 'CLIENT') {
+      if (
+        !session.clientId ||
+        !session.magicLinkId ||
+        !session.magicLink ||
+        session.magicLink.revokedAt !== null
+      ) {
+        throw new UnauthorizedException();
+      }
+      req.__requestContext = {
+        principal: {
+          kind: 'CLIENT',
+          agencyId: session.agencyId,
+          sessionId: session.id,
+          clientId: session.clientId,
+          magicLinkId: session.magicLinkId,
+        },
+        csrfSecret: session.csrfSecret,
+      };
+      return true;
+    }
+
+    throw new UnauthorizedException();
   }
 }

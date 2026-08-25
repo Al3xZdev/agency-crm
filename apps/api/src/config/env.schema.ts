@@ -9,6 +9,8 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(7),
+  /** Absolute web origin used when minting client magic-link URLs. */
+  PUBLIC_WEB_URL: z.string().url().default('http://localhost:3001'),
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   LOCAL_STORAGE_PATH: z.string().min(1).default('/app/assets'),
 });
