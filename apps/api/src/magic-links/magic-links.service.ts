@@ -8,8 +8,6 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { Principal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -48,6 +46,8 @@ export class MagicLinksService {
   private readonly prisma: PrismaService;
   private readonly tenancy: TenancyService;
   private readonly webBaseUrl: string;
+  /** Single source of truth for session lifetime — same value drives the cookie maxAge. */
+  private readonly sessionTtlMs: number;
 
   constructor(
     @Inject(SYSTEM_PRISMA) prisma: PrismaService,
@@ -57,6 +57,7 @@ export class MagicLinksService {
     this.prisma = prisma;
     this.tenancy = tenancy;
     this.webBaseUrl = config.PUBLIC_WEB_URL.replace(/\/+$/, '');
+    this.sessionTtlMs = config.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
   }
 
   async mint(
@@ -131,7 +132,7 @@ export class MagicLinksService {
         clientId: link.clientId,
         magicLinkId: link.id,
         csrfSecret,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+        expiresAt: new Date(Date.now() + this.sessionTtlMs),
       },
     });
     void this.prisma.magicLink
