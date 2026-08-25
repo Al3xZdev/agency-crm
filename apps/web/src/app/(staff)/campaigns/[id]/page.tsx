@@ -52,8 +52,8 @@ export default function CampaignDetailPage() {
     <>
       <h1>Creatives</h1>
       <p style={{ color: '#666' }}>
-        New creatives start in <strong>DRAFT</strong>; uploads and review arrive with the next
-        slices.
+        New creatives start in <strong>DRAFT</strong>; upload the first version to send them to
+        review.
       </p>
       <form onSubmit={onCreate} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input
@@ -88,7 +88,8 @@ export default function CampaignDetailPage() {
               <span style={{ fontWeight: 600 }}>{c.title}</span>{' '}
               <span style={{ color: '#666' }}>
                 · {c.kind} · {c.status}
-              </span>
+              </span>{' '}
+              <Link href={`/upload/${c.id}`}>Upload version</Link>
             </li>
           ))}
         </ul>
