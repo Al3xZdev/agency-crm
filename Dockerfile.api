@@ -25,10 +25,18 @@ RUN pnpm --filter @agency-crm/shared build \
  && pnpm --filter @agency-crm/api build
 
 FROM base AS runtime
+# Non-root runtime (slice-3.5 audit, finding 7). The assets dir is pre-created
+# with the app ownership so the named volume inherits it on first mount and
+# the local storage driver can write. Dev-dependency pruning stays deferred
+# until this image can be exercised on a Docker-capable host.
+RUN addgroup -S app && adduser -S app -G app \
+ && mkdir -p /app/assets \
+ && chown -R app:app /app/assets
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/shared ./packages/shared
-COPY --from=build /app/apps/api ./apps/api
+COPY --from=build --chown=app:app /app/node_modules ./node_modules
+COPY --from=build --chown=app:app /app/packages/shared ./packages/shared
+COPY --from=build --chown=app:app /app/apps/api ./apps/api
+USER app
 WORKDIR /app/apps/api
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

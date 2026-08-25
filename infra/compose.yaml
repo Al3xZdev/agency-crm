@@ -3,6 +3,7 @@ name: agency-crm
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agency}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -14,8 +15,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    # Loopback-only by default (audit finding 9): the app talks to the db over
+    # the internal network; host access is for admin tooling, not the LAN.
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
 
   # One-shot migration runner (design §10): applies prisma migrations, then exits.
   migrate:
@@ -34,7 +37,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    restart: unless-stopped
     environment:
+      NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}
@@ -56,8 +61,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    restart: unless-stopped
     command: ["node", "-e", "setInterval(() => {}, 2147483647)"]
     environment:
+      NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       REMINDERS_DISABLED: ${REMINDERS_DISABLED:-false}
@@ -74,6 +81,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
     environment:
       INTERNAL_API_URL: http://api:3000
       HOSTNAME: 0.0.0.0
