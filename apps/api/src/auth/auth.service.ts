@@ -7,6 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 const THROTTLE_WINDOW_MS = 15 * 60 * 1000;
 const THROTTLE_MAX_FAILURES = 10;
 
+/**
+ * Real argon2id hash of an unreachable random value. Unknown-email and
+ * deactivated-user logins verify against it so every 401 path costs the
+ * same argon2 work — response timing cannot enumerate accounts.
+ */
+const TIMING_PARITY_HASH =
+  '$argon2id$v=19$m=19456,t=2,p=1$qpLS7MOuxcFvq7nl6IBFrw$BLBLXhTQnpLxaTY5fmZqAkE3MkewrcXus9FO40Ndr+c';
+
 export class TooManyRequestsException extends HttpException {
   constructor() {
     super({ statusCode: 429, message: 'Too Many Requests' }, 429);
@@ -44,6 +52,12 @@ export class AuthService {
   async login(email: string, password: string, ttlDays: number): Promise<MintedSession> {
     const emailLower = email.trim().toLowerCase();
 
+    // Opportunistic pruning keeps the attempts table bounded even for
+    // addresses that never log in successfully (audit finding 11).
+    await this.prisma.loginAttempt.deleteMany({
+      where: { emailLower, attemptedAt: { lt: new Date(Date.now() - THROTTLE_WINDOW_MS) } },
+    });
+
     const failures = await this.prisma.loginAttempt.count({
       where: { emailLower, attemptedAt: { gte: new Date(Date.now() - THROTTLE_WINDOW_MS) } },
     });
@@ -55,6 +69,10 @@ export class AuthService {
     let valid = false;
     if (user?.isActive) {
       valid = await verify(user.passwordHash, password).catch(() => false);
+    } else {
+      // Constant-work parity: unknown email AND deactivated user burn the
+      // same argon2 cost as a wrong password (audit finding 3).
+      await verify(TIMING_PARITY_HASH, password).catch(() => false);
     }
 
     if (!valid || !user) {
