@@ -38,3 +38,28 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
     referrerPolicy: 'no-referrer',
   });
 }
+
+/**
+ * JSON helper for staff surfaces: parses the body and turns non-2xx
+ * responses into Errors carrying the server's message (e.g. 409
+ * CAMPAIGN_NOT_EMPTY) so forms can surface them inline.
+ */
+export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(url, {
+    ...init,
+    headers: init?.body ? { 'Content-Type': 'application/json', ...init?.headers } : init?.headers,
+  });
+  const text = await res.text();
+  let body: unknown = undefined;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
+  if (!res.ok) {
+    const message =
+      (body as { message?: string } | undefined)?.message ?? `Request failed (${res.status})`;
+    throw new Error(message);
+  }
+  return body as T;
+}
