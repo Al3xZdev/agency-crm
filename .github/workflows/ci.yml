@@ -15,12 +15,15 @@ jobs:
           node-version: 22
       - run: corepack enable pnpm
       - run: pnpm install --frozen-lockfile
+      # Generated @prisma/client types (User, Session, StaffRole, Prisma
+      # namespace) are required by tsc and type-aware linting; generate
+      # before ANY check runs.
+      - run: pnpm --filter @agency-crm/api db:generate
       # Web is typechecked by its own project (Next.js owns its tsconfig);
       # tsc -b covers packages/shared + apps/api composite graph.
       - run: pnpm --filter @agency-crm/web exec tsc --noEmit
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm --filter @agency-crm/api db:generate
       - run: pnpm --filter @agency-crm/web build
       - run: pnpm -r test
 
