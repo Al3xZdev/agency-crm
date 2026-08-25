@@ -9,24 +9,13 @@ import { Reflector } from '@nestjs/core';
 import { createHash } from 'node:crypto';
 import type { Request } from 'express';
 import { PUBLIC_KEY } from './public.decorator';
+import { parseCookies } from './parse-cookies';
+import { SESSION_COOKIE } from './cookies';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestContext } from '../tenancy/request-context.als';
 
-export const SESSION_COOKIE = 'agency_session';
-
 export interface StashRequest extends Request {
   __requestContext?: RequestContext;
-}
-
-function parseCookies(header: string | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!header) return out;
-  for (const part of header.split(';')) {
-    const idx = part.indexOf('=');
-    if (idx === -1) continue;
-    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
-  }
-  return out;
 }
 
 /**
@@ -55,7 +44,7 @@ export class SessionGuard implements CanActivate {
     }
 
     const req = context.switchToHttp().getRequest<StashRequest>();
-    const raw = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    const raw = parseCookies(req)[SESSION_COOKIE];
     if (!raw) throw new UnauthorizedException();
 
     const tokenHash = createHash('sha256').update(raw).digest('hex');

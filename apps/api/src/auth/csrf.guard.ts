@@ -9,20 +9,12 @@ import { Reflector } from '@nestjs/core';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
 import { PUBLIC_KEY } from './public.decorator';
-import { CSRF_COOKIE } from './cookies';
+import { parseCookies } from './parse-cookies';
+import { cookiePolicy } from './cookies';
+import { CONFIG } from '../config/config.module';
+import type { Env } from '../config/env.schema';
 
 const CSRF_HEADER = 'x-csrf-token';
-
-function parseCookies(header: string | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!header) return out;
-  for (const part of header.split(';')) {
-    const idx = part.indexOf('=');
-    if (idx === -1) continue;
-    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
-  }
-  return out;
-}
 
 function safeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a);
@@ -33,16 +25,24 @@ function safeEqual(a: string, b: string): boolean {
 /**
  * Double-submit CSRF gate bound to the session secret (task 2.6).
  *
- * The login response sets `__Host-csrf` (readable cookie, NOT HttpOnly)
- * containing `<nonce>.<hmac_sha256(session.csrfSecret, nonce)>`; every unsafe
- * method must echo it in `X-CSRF-Token`. A cross-site attacker can neither
- * read the cookie nor re-sign a forged nonce without the per-session secret.
+ * The login response sets a readable (NOT HttpOnly) CSRF cookie containing
+ * `<nonce>.<hmac_sha256(session.csrfSecret, nonce)>`; every unsafe method
+ * must echo it in `X-CSRF-Token`. A cross-site attacker can neither read the
+ * cookie nor re-sign a forged nonce without the per-session secret.
  * Missing/mismatched/badly-signed pairs get an identical generic 403 before
- * any handler code runs.
+ * any handler code runs. Cookie naming follows the shared cookie policy so
+ * the `__Host-` prefix is only used when Secure is on.
  */
 @Injectable()
 export class CsrfGuard implements CanActivate {
-  constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
+  private readonly csrfCookieName: string;
+
+  constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
+    @Inject(CONFIG) config: Env,
+  ) {
+    this.csrfCookieName = cookiePolicy(config.NODE_ENV).csrfName;
+  }
 
   canActivate(context: ExecutionContext): boolean {
     if (
@@ -62,7 +62,7 @@ export class CsrfGuard implements CanActivate {
     // SessionGuard ran first for any non-public route; no stash ⇒ no session ⇒ fail.
     const csrfSecret = (req as Request & { __requestContext?: { csrfSecret?: string } })
       .__requestContext?.csrfSecret;
-    const cookie = parseCookies(req.headers.cookie)[CSRF_COOKIE];
+    const cookie = parseCookies(req)[this.csrfCookieName];
     const header = req.headers[CSRF_HEADER] as string | undefined;
 
     if (!csrfSecret || !cookie || !header || !this.isValidPair(cookie, header, csrfSecret)) {
