@@ -7,7 +7,8 @@
     "test": "vitest run --passWithNoTests",
     "start": "node dist/main.js",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate deploy"
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "node scripts/seed.ts"
   },
   "dependencies": {
     "@agency-crm/shared": "workspace:*",

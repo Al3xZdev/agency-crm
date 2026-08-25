@@ -20,14 +20,27 @@ services:
     ports:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
 
-  # One-shot migration runner (design §10): applies prisma migrations, then exits.
+  # One-shot migration runner (design §10): applies prisma migrations, then
+  # optionally bootstraps the first SUPER_ADMIN when SEED_ADMIN_* is set,
+  # then exits.
   migrate:
     build:
       context: .
       dockerfile: Dockerfile.api
-    command: ["node", "/app/node_modules/prisma/build/index.js", "migrate", "deploy"]
+    command:
+      - sh
+      - -c
+      - |
+        node /app/node_modules/prisma/build/index.js migrate deploy &&
+        if [ -n "$$SEED_ADMIN_EMAIL" ] && [ -n "$$SEED_ADMIN_PASSWORD" ]; then
+          node /app/apps/api/scripts/seed.ts;
+        else
+          echo "migrate: SEED_ADMIN_* not set, skipping admin bootstrap";
+        fi
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
