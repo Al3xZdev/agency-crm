@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { PgBossService } from '../../src/jobs/pg-boss.service';
 import { SESSION_COOKIE, cookiePolicy } from '../../src/auth/cookies';
 
 /**
@@ -160,6 +161,8 @@ describe('staff auth (slice 2)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(db)
+      .overrideProvider(PgBossService)
+      .useValue({ boss: { stop: async () => {} } })
       .compile();
 
     app = moduleRef.createNestApplication();

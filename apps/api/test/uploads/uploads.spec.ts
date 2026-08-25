@@ -10,7 +10,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
-import { DevVersionQueue } from '../../src/jobs/version-queue.port';
+import { PgBossService } from '../../src/jobs/pg-boss.service';
+import { VERSION_QUEUE } from '../../src/jobs/jobs.module';
 import { SESSION_COOKIE, cookiePolicy } from '../../src/auth/cookies';
 import { applyOperation } from '../../src/tenancy/tenancy.rules';
 import { currentPrincipal } from '../../src/tenancy/request-context.als';
@@ -323,7 +324,9 @@ describe('upload pipeline (slice 5b)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(db)
-      .overrideProvider(DevVersionQueue)
+      .overrideProvider(PgBossService)
+      .useValue({ boss: { stop: async () => {} } })
+      .overrideProvider(VERSION_QUEUE)
       .useValue({ enqueueProcessVersion: async (job: { versionId: string }) => enqueued.push(job.versionId) })
       .compile();
     app = moduleRef.createNestApplication();

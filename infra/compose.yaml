@@ -70,13 +70,12 @@ services:
         condition: service_completed_successfully
 
   # Same image as api, worker-only bootstrap (design §10).
-  # Placeholder heartbeat until slice 6 ships main-worker bootstrap (task 6.5).
   worker:
     build:
       context: .
       dockerfile: Dockerfile.api
     restart: unless-stopped
-    command: ["node", "-e", "setInterval(() => {}, 2147483647)"]
+    command: ["node", "dist/main-worker.js"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}

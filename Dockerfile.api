@@ -29,7 +29,9 @@ FROM base AS runtime
 # with the app ownership so the named volume inherits it on first mount and
 # the local storage driver can write. Dev-dependency pruning stays deferred
 # until this image can be exercised on a Docker-capable host.
+# ffmpeg is required by the worker for ffprobe/ffmpeg video processing (slice 6).
 RUN addgroup -S app && adduser -S app -G app \
+ && apk add --no-cache ffmpeg \
  && mkdir -p /app/assets \
  && chown -R app:app /app/assets
 ENV NODE_ENV=production

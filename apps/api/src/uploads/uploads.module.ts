@@ -1,7 +1,8 @@
 import { Body, Controller, Module, Param, Post, Req } from '@nestjs/common';
 
 import { Roles } from '../auth/roles.decorator';
-import { DevVersionQueue } from '../jobs/version-queue.port';
+import { JobsModule, VERSION_QUEUE } from '../jobs/jobs.module';
+import { PgBossQueue } from '../jobs/pg-boss.queue';
 import { StorageModule } from '../storage/storage.module';
 import type { Request } from 'express';
 import { UploadsService } from './uploads.service';
@@ -30,8 +31,12 @@ export class UploadsController {
 }
 
 @Module({
-  imports: [StorageModule],
-  providers: [UploadsService, DevVersionQueue],
+  imports: [StorageModule, JobsModule],
+  providers: [
+    UploadsService,
+    PgBossQueue,
+    { provide: VERSION_QUEUE, useExisting: PgBossQueue },
+  ],
   controllers: [UploadsController],
   exports: [UploadsService],
 })

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { PgBossService } from '../../src/jobs/pg-boss.service';
 import { SESSION_COOKIE, cookiePolicy } from '../../src/auth/cookies';
 import { applyOperation } from '../../src/tenancy/tenancy.rules';
 import { currentPrincipal } from '../../src/tenancy/request-context.als';
@@ -240,6 +241,8 @@ describe('hierarchy CRUD (slice 5a)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue(db)
+      .overrideProvider(PgBossService)
+      .useValue({ boss: { stop: async () => {} } })
       .compile();
     app = moduleRef.createNestApplication();
     await app.init();

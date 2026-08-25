@@ -1,7 +1,8 @@
-import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Inject, Optional, ServiceUnavailableException } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { SYSTEM_PRISMA } from '../prisma/system-prisma.token';
 import { Public } from '../auth/public.decorator';
+import { PgBossService } from '../jobs/pg-boss.service';
 
 /**
  * Slice-1 liveness/readiness probes (task 1.4), hardened per the slice-3.5
@@ -19,7 +20,10 @@ import { Public } from '../auth/public.decorator';
  */
 @Controller()
 export class HealthController {
-  constructor(@Inject(SYSTEM_PRISMA) private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject(SYSTEM_PRISMA) private readonly prisma: PrismaClient,
+    @Optional() @Inject(PgBossService) private readonly pgBoss?: PgBossService,
+  ) {}
 
   @Public()
   @Get('healthz')
@@ -29,12 +33,24 @@ export class HealthController {
 
   @Public()
   @Get('readyz')
-  async readiness(): Promise<{ status: string; db: string }> {
+  async readiness(): Promise<{ status: string; db: string; queue?: string }> {
+    const result: { status: string; db: string; queue?: string } = { status: 'ok', db: 'up' };
+
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-      return { status: 'ok', db: 'up' };
     } catch {
       throw new ServiceUnavailableException({ status: 'error', db: 'down' });
     }
+
+    if (this.pgBoss) {
+      try {
+        const installed = await this.pgBoss.boss.isInstalled();
+        result.queue = installed ? 'up' : 'not_installed';
+      } catch {
+        result.queue = 'down';
+      }
+    }
+
+    return result;
   }
 }

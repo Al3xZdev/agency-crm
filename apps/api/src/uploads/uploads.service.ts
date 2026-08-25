@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
+  Inject,
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
@@ -14,7 +15,8 @@ import Busboy from 'busboy';
 import { currentPrincipal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
 import { StorageService } from '../storage/storage.module';
-import { DevVersionQueue } from '../jobs/version-queue.port';
+import { VERSION_QUEUE } from '../jobs/jobs.module';
+import type { VersionQueue } from '../jobs/version-queue.port';
 import { MAX_UPLOAD_BYTES, validateAdmission } from './admission.validator';
 
 export interface CreatedVersion {
@@ -39,9 +41,7 @@ export class UploadsService {
   constructor(
     private readonly tenancy: TenancyService,
     private readonly storage: StorageService,
-    // Concrete token: the interface is type-only and invisible to Nest DI.
-    // Slice 6 swaps the provider (pg-boss) without touching call sites.
-    private readonly queue: DevVersionQueue,
+    @Inject(VERSION_QUEUE) private readonly queue: VersionQueue,
   ) {}
 
   /** Multipart admission + admit-to-storage; tx after the bytes are durable. */

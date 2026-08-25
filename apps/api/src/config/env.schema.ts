@@ -13,6 +13,8 @@ export const envSchema = z.object({
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:3001'),
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   LOCAL_STORAGE_PATH: z.string().min(1).default('/app/assets'),
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  HEARTBEAT_PATH: z.string().default('/tmp/worker-heartbeat'),
 });
 
 export type Env = z.infer<typeof envSchema>;
