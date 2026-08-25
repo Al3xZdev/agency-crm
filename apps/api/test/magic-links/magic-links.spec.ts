@@ -7,12 +7,23 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SESSION_COOKIE, cookiePolicy } from '../../src/auth/cookies';
+import { applyOperation } from '../../src/tenancy/tenancy.rules';
+import { currentPrincipal } from '../../src/tenancy/request-context.als';
 
 /**
  * Slice-4 magic-link suite (tasks 4.1–4.5). Runs against a mocked
- * PrismaService; persistence semantics (unique tokenHash, FK cascades) stay
- * covered by container-based integration evidence pending Docker.
+ * PrismaService whose $extends view routes through the REAL pure decision
+ * layer (applyOperation) using the SAME principal source as
+ * TenancyService.scoped() — so mint/revoke scoping is actually exercised,
+ * not stubbed away (audit finding 2). Persistence semantics (unique
+ * tokenHash, FK cascades) stay covered by container-based evidence.
  */
+
+const TENANT_MODEL_NAMES: Record<string, string> = {
+  client: 'Client',
+  magicLink: 'MagicLink',
+  session: 'Session',
+};
 
 function sha256hex(v: string): string {
   return createHash('sha256').update(v).digest('hex');
@@ -24,7 +35,46 @@ function signCsrf(secret: string): string {
 }
 
 function matchesWhere(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
-  return Object.entries(where).every(([k, v]) => row[k] === v);
+  for (const [k, v] of Object.entries(where)) {
+    if (k === 'AND') {
+      const clauses = v as Array<Record<string, unknown>>;
+      if (!clauses.every((sub) => matchesWhere(row, sub))) return false;
+      continue;
+    }
+    if (row[k] !== v) return false;
+  }
+  return true;
+}
+
+/**
+ * Tenanted view of the mock db: every delegate runs the REAL applyOperation
+ * with the principal from the request ALS (same source as the production
+ * extension), then hits the raw mock. $transaction hands the tx callback a
+ * tenanted view too, mirroring interactive transactions.
+ */
+function buildTenantedView(raw: MockDbBase): MockDbBase {
+  const view = { ...raw } as MockDbBase;
+  for (const key of Object.keys(TENANT_MODEL_NAMES)) {
+    const target = raw[key];
+    view[key] = new Proxy(target, {
+      get(t, op) {
+        const orig = Reflect.get(t, op);
+        if (typeof orig !== 'function') return orig;
+        return async (...callArgs: unknown[]) => {
+          const args = { ...((callArgs[0] as object) ?? {}) };
+          const principal = currentPrincipal();
+          if (!principal) throw new Error('TENANCY_VIOLATION(mock): scoped call without principal');
+          applyOperation(TENANT_MODEL_NAMES[key], String(op), args as Record<string, unknown>, principal);
+          return (orig as (...a: unknown[]) => unknown).call(t, args);
+        };
+      },
+    }) as never;
+  }
+  view.$transaction = async (fn: (tx: MockDbBase) => Promise<unknown>) => fn(view);
+  // TenancyService.scoped() calls $extends on whatever it received; scoping
+  // is already applied on this view, so it just yields itself.
+  (view as unknown as Record<string, unknown>).$extends = () => view;
+  return view;
 }
 
 function buildMockDb() {
@@ -103,12 +153,14 @@ function buildMockDb() {
         include?: object;
       }) => {
         void include;
-        const s =
+        const found =
           [...sessions.values()].find((x) => x.tokenHash === where.tokenHash) ?? null;
-        if (!s) return null;
-        // Emulate Prisma includes so the guard can read nested relations.
-        if (s.userId && !s.user) s.user = userRows[s.userId as string] ?? null;
-        if (s.magicLinkId && !s.magicLink) s.magicLink = links.get(s.magicLinkId as string) ?? null;
+        if (!found) return null;
+        // Emulate Prisma includes WITHOUT mutating stored rows (audit F6):
+        // attach relations on a shallow clone.
+        const s = { ...found };
+        if (s.userId) s.user = userRows[s.userId as string] ?? null;
+        if (s.magicLinkId) s.magicLink = links.get(s.magicLinkId as string) ?? null;
         return s;
       },
       updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
@@ -122,15 +174,18 @@ function buildMockDb() {
       },
     },
     client: {
-      findFirst: ({ where }: { where: { id: string } }) =>
-        [...clients.values()].find((c) => c.id === where.id) ?? null,
+      findFirst: ({ where }: { where: Record<string, unknown> }) =>
+        [...clients.values()].find((c) => matchesWhere(c, where)) ?? null,
     },
   };
-  (db.$extends as unknown) = () => db;
+  // Mirror production: $extends yields the tenanted view; the raw instance
+  // stays unscoped (SessionGuard, public redeem).
+  (db.$extends as unknown) = () => buildTenantedView(db);
   return db;
 }
 
-type MockDb = ReturnType<typeof buildMockDb>;
+type MockDbBase = ReturnType<typeof buildMockDb>;
+type MockDb = MockDbBase;
 
 describe('magic links (slice 4)', () => {
   let app: INestApplication;
@@ -148,6 +203,9 @@ describe('magic links (slice 4)', () => {
     db = buildMockDb();
     db._seedClient('client_1');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      // Production wiring: both tokens receive the SAME raw instance;
+      // tenancy scoping exists only through $extends inside
+      // TenancyService.scoped(). The mock's $extends mirrors that.
       .overrideProvider(PrismaService)
       .useValue(db)
       .compile();
@@ -306,7 +364,7 @@ describe('magic links (slice 4)', () => {
     expect((await redeem(token)).status).toBe(401);
   });
 
-  it('revoking an already-revoked or foreign link is a defensive 404', async () => {
+  it('revoking a missing link is a defensive 404', async () => {
     const auth = staffAuth('SUPER_ADMIN');
     const again = await request(app.getHttpServer())
       .post('/magic-links/link_missing/revoke')
@@ -314,6 +372,59 @@ describe('magic links (slice 4)', () => {
       .set(auth.headers)
       .send({});
     expect(again.status).toBe(404);
+  });
+
+  it('mint is agency-scoped: a foreign client id reads as 404 (tenancy)', async () => {
+    db._seedClient('client_2');
+    db._clients.get('client_2')!.agencyId = 'agency_2';
+
+    const res = await mintLink(staffAuth('SUPER_ADMIN'), 'client_2');
+    expect(res.status).toBe(404);
+    // And nothing was persisted for the denied target.
+    expect(db._links.size).toBe(0);
+  });
+
+  it('revoke is idempotent-hostile: second revoke of the same link is 404', async () => {
+    const auth = staffAuth('SUPER_ADMIN');
+    const minted = await mintLink(auth);
+    const linkId = minted.body.id as string;
+
+    const first = await request(app.getHttpServer())
+      .post(`/magic-links/${linkId}/revoke`)
+      .set('Cookie', auth.cookie)
+      .set(auth.headers)
+      .send({});
+    const second = await request(app.getHttpServer())
+      .post(`/magic-links/${linkId}/revoke`)
+      .set('Cookie', auth.cookie)
+      .set(auth.headers)
+      .send({});
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(404);
+  });
+
+  it('revoke cannot touch another agency\'s link (tenancy)', async () => {
+    const auth = staffAuth('SUPER_ADMIN');
+    db._links.set('link_foreign', {
+      id: 'link_foreign',
+      agencyId: 'agency_2',
+      clientId: 'client_x',
+      recipientEmail: '',
+      createdById: 'u_other',
+      tokenHash: sha256hex('foreign-token'),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/magic-links/link_foreign/revoke')
+      .set('Cookie', auth.cookie)
+      .set(auth.headers)
+      .send({});
+    expect(res.status).toBe(404);
+    expect(db._links.get('link_foreign')!.revokedAt).toBeNull();
   });
 
   it('CREATIVE cannot mint or revoke links (role 403)', async () => {
