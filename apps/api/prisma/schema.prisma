@@ -146,6 +146,7 @@ model Session {
 
   @@index([magicLinkId])
   @@index([expiresAt])
+  @@index([userId])
 }
 
 model MagicLink {
