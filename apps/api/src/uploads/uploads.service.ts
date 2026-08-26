@@ -4,6 +4,7 @@ import {
   HttpException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
@@ -14,10 +15,12 @@ import Busboy from 'busboy';
 
 import { currentPrincipal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.module';
 import { VERSION_QUEUE } from '../jobs/jobs.module';
 import type { VersionQueue } from '../jobs/version-queue.port';
 import { MAX_UPLOAD_BYTES, validateAdmission } from './admission.validator';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface CreatedVersion {
   id: string;
@@ -38,10 +41,14 @@ export interface CreatedVersion {
  */
 @Injectable()
 export class UploadsService {
+  private readonly logger = new Logger(UploadsService.name);
+
   constructor(
     private readonly tenancy: TenancyService,
     private readonly storage: StorageService,
+    private readonly prisma: PrismaService,
     @Inject(VERSION_QUEUE) private readonly queue: VersionQueue,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Multipart admission + admit-to-storage; tx after the bytes are durable. */
@@ -119,6 +126,10 @@ export class UploadsService {
       });
       return version;
     });
+
+    this.fireVersionNew(created.id, creative).catch((err) =>
+      this.logger.error(`VERSION_NEW notification failed: ${err}`),
+    );
 
     return { id: created.id, versionNo: created.versionNo, state: 'READY' };
   }
@@ -241,12 +252,18 @@ export class UploadsService {
     try {
       const result = await attempt();
       await this.queue.enqueueProcessVersion({ versionId: result.id }); // ONLY after commit
+      this.fireVersionNew(result.id, input.creative).catch((err) =>
+        this.logger.error(`VERSION_NEW notification failed: ${err}`),
+      );
       return result;
     } catch (err) {
       if ((err as { code?: string }).code !== 'P2002') throw err;
       try {
         const result = await attempt();
         await this.queue.enqueueProcessVersion({ versionId: result.id });
+        this.fireVersionNew(result.id, input.creative).catch((err) =>
+          this.logger.error(`VERSION_NEW notification failed: ${err}`),
+        );
         return result;
       } catch (retryErr) {
         if ((retryErr as { code?: string }).code === 'P2002') {
@@ -266,6 +283,31 @@ export class UploadsService {
       default:
         return new ConflictException(failure.code);
     }
+  }
+
+  /** Fire-and-forget VERSION_NEW notification to the client. */
+  private async fireVersionNew(versionId: string, creative: { id: string; clientId: string }) {
+    // Use unscoped prisma (not tenancy.scoped()) because this runs async
+    // outside the request ALS context. Queries use explicit IDs — safe unscoped.
+    const version = await this.prisma.creativeVersion.findUnique({
+      where: { id: versionId },
+      select: { versionNo: true },
+    });
+    if (!version) return;
+
+    const creativeRow = await this.prisma.creative.findUnique({
+      where: { id: creative.id },
+      select: { title: true, agencyId: true },
+    });
+
+    await this.notifications.queueVersionNew({
+      agencyId: creativeRow?.agencyId ?? '',
+      clientId: creative.clientId,
+      creativeId: creative.id,
+      creativeTitle: creativeRow?.title ?? 'Untitled',
+      versionId,
+      versionNo: version.versionNo,
+    });
   }
 }
 

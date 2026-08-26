@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { JobsModule, VERSION_QUEUE } from '../jobs/jobs.module';
 import { PgBossQueue } from '../jobs/pg-boss.queue';
 import { StorageModule } from '../storage/storage.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import type { Request } from 'express';
 import { UploadsService } from './uploads.service';
 
@@ -31,7 +32,7 @@ export class UploadsController {
 }
 
 @Module({
-  imports: [StorageModule, JobsModule],
+  imports: [StorageModule, JobsModule, NotificationsModule],
   providers: [
     UploadsService,
     PgBossQueue,
