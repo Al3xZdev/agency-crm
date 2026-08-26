@@ -1,12 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { type Principal } from '../tenancy/request-context.als';
+import { PrismaService } from '../prisma/prisma.service';
 import { TenancyService } from '../tenancy/tenancy.service';
 import type { CreateCommentDto } from '@agency-crm/shared';
 
 @Injectable()
 export class CommentsService {
-  constructor(private readonly tenancy: TenancyService) {}
+  constructor(
+    private readonly tenancy: TenancyService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async create(versionId: string, dto: CreateCommentDto, principal: Principal) {
     const db = this.tenancy.scoped();
@@ -25,7 +29,7 @@ export class CommentsService {
       });
       authorLabel = user?.displayName ?? 'Unknown';
     } else {
-      const client = await db.client.findUnique({
+      const client = await this.prisma.client.findUnique({
         where: { id: principal.clientId! },
         select: { name: true },
       });

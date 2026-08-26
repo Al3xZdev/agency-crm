@@ -51,6 +51,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       res.status(404).json({ statusCode: 404, message: 'NOT_FOUND' });
       return;
     }
+    console.error('[AllExceptionsFilter] Unhandled error:', exception);
     res.status(500).json({ statusCode: 500, message: 'INTERNAL_SERVER_ERROR' });
   }
 }
