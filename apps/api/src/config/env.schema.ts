@@ -15,6 +15,8 @@ export const envSchema = z.object({
   LOCAL_STORAGE_PATH: z.string().min(1).default('/app/assets'),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
   HEARTBEAT_PATH: z.string().default('/tmp/worker-heartbeat'),
+  REMINDERS_DISABLED: z.coerce.boolean().default(false),
+  DIGEST_DISABLED: z.coerce.boolean().default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
