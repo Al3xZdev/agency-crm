@@ -17,6 +17,12 @@ export const envSchema = z.object({
   HEARTBEAT_PATH: z.string().default('/tmp/worker-heartbeat'),
   REMINDERS_DISABLED: z.coerce.boolean().default(false),
   DIGEST_DISABLED: z.coerce.boolean().default(false),
+  /** SMTP connection URL (e.g. smtps://user:pass@smtp.example.com:465). When set, emails are sent via real SMTP; otherwise the console stub is used. */
+  SMTP_URL: z.string().optional(),
+  /** From address for outgoing emails (e.g. "Agency CRM <noreply@example.com>"). Required when SMTP_URL is set. */
+  MAIL_FROM: z.string().optional(),
+  /** Secret key for encrypting email content at rest (future S11b). */
+  MAIL_SEAL_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
