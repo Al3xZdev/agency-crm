@@ -92,12 +92,21 @@ ${lines.map((l) => `<li>${escapeHtml(l.trim().replace(/^- /, ''))}</li>`).join('
   }
 
   private async resolveClientEmails(clientId: string): Promise<string[]> {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { email: true },
+    });
+    const clientEmail = client?.email;
+
     const links = await this.prisma.magicLink.findMany({
       where: { clientId, revokedAt: null },
       select: { recipientEmail: true },
       distinct: ['recipientEmail'],
     });
-    return links.map((l) => l.recipientEmail).filter(Boolean);
+    const emails = links.map((l) => l.recipientEmail).filter(Boolean);
+
+    if (clientEmail) emails.push(clientEmail);
+    return [...new Set(emails)];
   }
 }
 

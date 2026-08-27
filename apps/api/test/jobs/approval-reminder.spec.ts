@@ -25,6 +25,7 @@ function buildHandler(mocks: {
 
   const prisma = {
     creativeVersion: { findMany, update },
+    client: { findUnique: vi.fn().mockResolvedValue(null) },
     magicLink: {
       findMany: vi.fn().mockResolvedValue([{ recipientEmail: 'client@test.com' }]),
     },
@@ -102,6 +103,7 @@ describe('ApprovalReminderHandler', () => {
         findMany: vi.fn().mockResolvedValue([staleVersion]),
         update: vi.fn(),
       },
+      client: { findUnique: vi.fn().mockResolvedValue(null) },
       magicLink: { findMany: vi.fn().mockResolvedValue([]) },
     };
 

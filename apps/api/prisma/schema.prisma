@@ -175,7 +175,8 @@ model Client {
   id        String   @id @default(cuid())
   agencyId  String
   name      String
-  contact   String?
+  email     String?  // direct client email for notifications
+  contact   String?  // phone / other contact info
   createdAt DateTime @default(now())
 
   agency           Agency            @relation(fields: [agencyId], references: [id])

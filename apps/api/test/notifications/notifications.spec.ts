@@ -279,7 +279,13 @@ function buildMockDb() {
         return s;
       },
     },
-    client: { create: ({ data }: { data: Record<string, unknown> }) => { const r = { id: `cl_${clients.size + 1}`, createdAt: new Date(), ...data }; clients.set(r.id as string, r); return r; } },
+    client: {
+      create: ({ data }: { data: Record<string, unknown> }) => { const r = { id: `cl_${clients.size + 1}`, createdAt: new Date(), ...data }; clients.set(r.id as string, r); return r; },
+      findUnique: ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        const row = [...clients.values()].find((r) => matchesWhere(r, where)) ?? null;
+        return row ? filterSelect(row, select) : null;
+      },
+    },
     campaign: { create: ({ data }: { data: Record<string, unknown> }) => { const r = { id: `cmp_${campaigns.size + 1}`, createdAt: new Date(), ...data }; campaigns.set(r.id as string, r); return r; } },
     creative: {
       create: ({ data }: { data: Record<string, unknown> }) => {

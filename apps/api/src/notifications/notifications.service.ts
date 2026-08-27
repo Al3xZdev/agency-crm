@@ -310,21 +310,29 @@ export class NotificationsService {
   // ---------------------------------------------------------------------------
 
   private async resolveClientEmails(clientId: string): Promise<string[]> {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { email: true },
+    });
+    const clientEmail = client?.email;
+
     const links = await this.prisma.magicLink.findMany({
       where: { clientId, revokedAt: null },
       select: { recipientEmail: true },
       distinct: ['recipientEmail'],
     });
     const emails = links.map((l) => l.recipientEmail).filter(Boolean);
+
+    if (clientEmail) emails.push(clientEmail);
     return [...new Set(emails)];
   }
 
   private async resolveStaffEmails(agencyId: string): Promise<string[]> {
     const users = await this.prisma.user.findMany({
-      where: { agencyId, isActive: true, role: 'SUPER_ADMIN' },
+      where: { agencyId, isActive: true },
       select: { email: true },
     });
-    return users.map((u) => u.email);
+    return [...new Set(users.map((u) => u.email))];
   }
 }
 

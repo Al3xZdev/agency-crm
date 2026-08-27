@@ -26,6 +26,7 @@ function buildHandler(mocks: {
       findMany: vi.fn().mockResolvedValue([{ id: 'a1', name: 'Test Agency' }]),
     },
     creativeVersion: { findMany },
+    client: { findUnique: vi.fn().mockResolvedValue(null) },
     magicLink: {
       findMany: vi.fn().mockResolvedValue([{ recipientEmail: 'client@test.com' }]),
     },
@@ -107,6 +108,7 @@ describe('WeeklyDigestHandler', () => {
         findMany: vi.fn().mockResolvedValue([{ id: 'a1', name: 'Test Agency' }]),
       },
       creativeVersion: { findMany: vi.fn().mockResolvedValue(pendingVersions) },
+      client: { findUnique: vi.fn().mockResolvedValue(null) },
       magicLink: {
         findMany: vi.fn()
           .mockResolvedValueOnce([{ recipientEmail: 'c1@test.com' }])
@@ -146,6 +148,7 @@ describe('WeeklyDigestHandler', () => {
         findMany: vi.fn().mockResolvedValue([{ id: 'a1', name: 'Test Agency' }]),
       },
       creativeVersion: { findMany: vi.fn().mockResolvedValue(pendingVersions) },
+      client: { findUnique: vi.fn().mockResolvedValue(null) },
       magicLink: {
         findMany: vi.fn().mockResolvedValue([]),
       },

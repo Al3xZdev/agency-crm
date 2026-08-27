@@ -19,11 +19,13 @@ import { TenancyService } from '../tenancy/tenancy.service';
 
 const createClientSchema = z.object({
   name: z.string().min(1).max(120),
+  email: z.string().email().max(200).optional(),
   contact: z.string().max(200).optional(),
 });
 
 const updateClientSchema = z.object({
   name: z.string().min(1).max(120).optional(),
+  email: z.string().email().max(200).nullable().optional(),
   contact: z.string().max(200).nullable().optional(),
 });
 
@@ -39,7 +41,7 @@ export class ClientsService {
 
   async list() {
     return this.tenancy.scoped().client.findMany({
-      select: { id: true, name: true, contact: true, createdAt: true },
+      select: { id: true, name: true, email: true, contact: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -49,7 +51,7 @@ export class ClientsService {
     const principal = currentPrincipal();
     if (!principal) throw new NotFoundException();
     return this.tenancy.scoped().client.create({
-      data: { agencyId: principal.agencyId, name: data.name, contact: data.contact ?? null },
+      data: { agencyId: principal.agencyId, name: data.name, email: data.email ?? null, contact: data.contact ?? null },
       select: { id: true },
     });
   }
@@ -62,7 +64,7 @@ export class ClientsService {
     return db.client.update({
       where: { id },
       data,
-      select: { id: true, name: true, contact: true },
+      select: { id: true, name: true, email: true, contact: true },
     });
   }
 
