@@ -23,6 +23,16 @@ export const envSchema = z.object({
   MAIL_FROM: z.string().optional(),
   /** Secret key for encrypting email content at rest (future S11b). */
   MAIL_SEAL_KEY: z.string().optional(),
+  /** S3-compatible endpoint URL (e.g. http://localhost:3900 for Garage). Required when STORAGE_DRIVER=s3. */
+  S3_ENDPOINT: z.string().optional(),
+  /** S3 bucket name. Required when STORAGE_DRIVER=s3. */
+  S3_BUCKET: z.string().optional(),
+  /** S3 access key ID. Required when STORAGE_DRIVER=s3. */
+  S3_ACCESS_KEY: z.string().optional(),
+  /** S3 secret access key. Required when STORAGE_DRIVER=s3. */
+  S3_SECRET_KEY: z.string().optional(),
+  /** S3 region (default: us-east-1). */
+  S3_REGION: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
