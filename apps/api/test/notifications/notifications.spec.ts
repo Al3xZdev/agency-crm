@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -11,6 +11,7 @@ import { VERSION_QUEUE } from '../../src/jobs/jobs.module';
 import { SESSION_COOKIE, cookiePolicy } from '../../src/auth/cookies';
 import { applyOperation } from '../../src/tenancy/tenancy.rules';
 import { currentPrincipal } from '../../src/tenancy/request-context.als';
+import { SealService } from '../../src/crypto/seal.service';
 
 // ── tenancy constants (must mirror schema TENANTED_MODELS) ──────────────────
 const TENANT_MODEL_NAMES: Record<string, string> = {
@@ -615,6 +616,131 @@ describe('notifications API (slice 9)', () => {
         (e) => e.template === 'COMMENT_NEW',
       ).length;
       expect(countAfterFirst).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── SealService integration (S11b) ───────────────────────────────────
+
+  describe('SealService integration (S11b)', () => {
+    let sealApp: INestApplication;
+    let sealDb: MockDb;
+    const sealKey = randomBytes(32).toString('base64');
+
+    function sealStaffAuth(role: 'SUPER_ADMIN' | 'ACCOUNT_MANAGER'): {
+      cookie: string;
+      headers: Record<string, string>;
+    } {
+      const userId = role === 'SUPER_ADMIN' ? 'u_admin' : 'u_mgr';
+      const raw = randomBytes(32).toString('base64url');
+      const csrf = signCsrf('staff-secret');
+      sealDb.session.create({
+        data: {
+          tokenHash: sha256hex(raw),
+          kind: 'STAFF',
+          agencyId: 'agency_1',
+          userId,
+          csrfSecret: 'staff-secret',
+          expiresAt: new Date(Date.now() + 86_400_000),
+          revokedAt: null,
+        },
+      });
+      return {
+        cookie: `${SESSION_COOKIE}=${raw}; ${csrfCookieName}=${csrf}`,
+        headers: { 'X-CSRF-Token': csrf },
+      };
+    }
+
+    beforeAll(async () => {
+      process.env.MAIL_SEAL_KEY = sealKey;
+    });
+
+    beforeEach(async () => {
+      sealDb = buildMockDb();
+      sealDb._seedClient('client_1');
+      sealDb._seedMagicLink('ml_1', 'client_1', 'client@test.test');
+
+      const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(PrismaService)
+        .useValue(sealDb)
+        .overrideProvider(PgBossService)
+        .useValue({ boss: { stop: async () => {} } })
+        .overrideProvider(VERSION_QUEUE)
+        .useValue({ enqueueProcessVersion: async () => {} })
+        .compile();
+
+      sealApp = moduleRef.createNestApplication();
+      await sealApp.init();
+    });
+
+    afterEach(async () => {
+      await sealApp?.close();
+      delete process.env.MAIL_SEAL_KEY;
+    });
+
+    it('queue seals bodyText in DB, listEmails returns decrypted plaintext', async () => {
+      const auth = sealStaffAuth('SUPER_ADMIN');
+
+      // Seed version + campaign + creative for the comment flow
+      sealDb._seedCampaign('cmp_s', 'client_1');
+      sealDb._seedCreative('cr_s', 'cmp_s', 'client_1', 'IMAGE');
+      sealDb._seedVersion('ver_s', 'cr_s', 'client_1', { versionNo: 1, state: 'READY' });
+
+      // Trigger an email via the comment endpoint
+      const res = await request(sealApp.getHttpServer())
+        .post('/versions/ver_s/comments')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ anchor: 'PLAIN', body: 'Seal test comment' });
+      expect(res.status).toBe(201);
+
+      // Wait for fire-and-forget async queue
+      await new Promise((r) => setTimeout(r, 200));
+
+      // Verify: DB stores sealed bodyText (starts with v1:)
+      const stored = [...sealDb._emailMessages.values()];
+      expect(stored.length).toBeGreaterThanOrEqual(1);
+      const sealed = stored.find((e) => e.template === 'COMMENT_NEW');
+      expect(sealed).toBeDefined();
+      expect((sealed!.bodyText as string).startsWith('v1:')).toBe(true);
+      expect((sealed!.bodyText as string)).not.toBe('Seal test comment');
+
+      // Verify: listEmails returns decrypted plaintext
+      const listRes = await request(sealApp.getHttpServer())
+        .get('/emails')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.length).toBeGreaterThanOrEqual(1);
+      const listed = listRes.body.find((e: Record<string, string>) => e.template === 'COMMENT_NEW');
+      expect(listed).toBeDefined();
+      expect(listed.bodyText).toContain('Seal test comment');
+      expect(listed.bodyText).not.toMatch(/^v1:/);
+    });
+
+    it('listEmails decrypts directly-seeded sealed data', async () => {
+      // Manually seed a sealed email message
+      const svc = new SealService();
+      const plaintext = 'Directly sealed body content';
+      const sealedText = svc.seal(plaintext);
+
+      sealDb._seedEmailMessage({
+        agencyId: 'agency_1',
+        template: 'VERSION_NEW',
+        status: 'SENT',
+        toAddresses: ['client@test.test'],
+        subject: 'Sealed email',
+        bodyText: sealedText,
+        bodyHtml: svc.seal('<p>Sealed HTML</p>'),
+      });
+
+      const auth = sealStaffAuth('SUPER_ADMIN');
+      const res = await request(sealApp.getHttpServer())
+        .get('/emails')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].bodyText).toBe(plaintext);
     });
   });
 });

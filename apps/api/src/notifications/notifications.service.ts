@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { EmailTemplate } from '@prisma/client';
+import { SealService } from '../crypto/seal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenancyService } from '../tenancy/tenancy.service';
 import type { EmailTransport } from './email.transport';
@@ -27,6 +28,7 @@ export class NotificationsService {
   constructor(
     private readonly tenancy: TenancyService,
     private readonly prisma: PrismaService,
+    private readonly seal: SealService,
     @Inject(EMAIL_TRANSPORT) private readonly transport: EmailTransport,
   ) {}
 
@@ -202,6 +204,11 @@ export class NotificationsService {
       }
     }
 
+    // Seal body content for at-rest encryption (S11b). Transport receives
+    // plaintext; DB stores sealed ciphertext.
+    const sealedBodyText = this.seal.seal(params.bodyText);
+    const sealedBodyHtml = this.seal.seal(params.bodyHtml);
+
     const email = await db.emailMessage.create({
       data: {
         agencyId: params.agencyId,
@@ -210,8 +217,8 @@ export class NotificationsService {
         dedupeKey: params.dedupeKey ?? null,
         toAddresses: params.toAddresses,
         subject: params.subject,
-        bodyText: params.bodyText,
-        bodyHtml: params.bodyHtml,
+        bodyText: sealedBodyText,
+        bodyHtml: sealedBodyHtml,
         relatedVersionId: params.relatedVersionId ?? null,
         relatedClientId: params.relatedClientId ?? null,
       },
@@ -256,7 +263,7 @@ export class NotificationsService {
     if (filters?.status) where.status = filters.status;
     if (filters?.template) where.template = filters.template;
 
-    return db.emailMessage.findMany({
+    const rows = await db.emailMessage.findMany({
       where,
       select: {
         id: true,
@@ -265,6 +272,7 @@ export class NotificationsService {
         toAddresses: true,
         subject: true,
         bodyText: true,
+        bodyHtml: true,
         relatedVersionId: true,
         relatedClientId: true,
         attempts: true,
@@ -277,6 +285,13 @@ export class NotificationsService {
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+
+    // Unseal encrypted body fields (S11b) before returning to callers.
+    return rows.map((row) => ({
+      ...row,
+      bodyText: this.seal.unseal(row.bodyText),
+      bodyHtml: this.seal.unseal(row.bodyHtml),
+    }));
   }
 
   async markHandled(emailId: string): Promise<{ id: string; handledAt: Date }> {

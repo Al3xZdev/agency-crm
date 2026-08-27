@@ -4,6 +4,7 @@ import { NotificationsController } from './notifications.controller';
 import { ConsoleEmailTransport } from './console-email.transport';
 import { SmtpEmailTransport } from './smtp-email.transport';
 import { EMAIL_TRANSPORT } from './email-transport.token';
+import { SealModule } from '../crypto/seal.module';
 
 /**
  * Notifications module (tasks S9 + S11a). Queues email messages for version
@@ -41,6 +42,7 @@ function createEmailTransport() {
 
 @Global()
 @Module({
+  imports: [SealModule],
   controllers: [NotificationsController],
   providers: [createEmailTransport(), NotificationsService],
   exports: [NotificationsService],
