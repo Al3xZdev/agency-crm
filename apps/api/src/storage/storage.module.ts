@@ -21,7 +21,12 @@ export class StorageService {
       case 'local':
         this.driver = new LocalStorageDriver(config.LOCAL_STORAGE_PATH);
         break;
-      case 's3':
+      case 's3': {
+        const missing = ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY', 'S3_SECRET_KEY']
+          .filter((k) => !config[k as keyof Env]);
+        if (missing.length) {
+          throw new Error(`STORAGE_DRIVER=s3 requires: ${missing.join(', ')}`);
+        }
         this.driver = new S3StorageDriver({
           endpoint: config.S3_ENDPOINT!,
           bucket: config.S3_BUCKET!,
@@ -30,6 +35,7 @@ export class StorageService {
           region: config.S3_REGION,
         });
         break;
+      }
       default: {
         const never: never = config.STORAGE_DRIVER;
         throw new Error(`unknown STORAGE_DRIVER ${String(never)}`);

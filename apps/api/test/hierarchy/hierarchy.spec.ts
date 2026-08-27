@@ -92,6 +92,8 @@ function buildMockDb() {
       },
       findFirst: ({ where }: { where: Record<string, unknown> }) =>
         [...map.values()].find((r) => matchesWhere(r, where)) ?? null,
+      findUnique: ({ where }: { where: Record<string, unknown> }) =>
+        [...map.values()].find((r) => matchesWhere(r, where)) ?? null,
       findMany: ({ where }: { where?: Record<string, unknown> }) =>
         [...map.values()].filter((r) => !where || matchesWhere(r, where)),
       // Tenancy injection nests the original where under AND:[scope, …], so
@@ -166,6 +168,24 @@ function buildMockDb() {
     client: crudFor(clients, 'cl', () => ({ agencyId: 'agency_1', contact: null })),
     campaign: crudFor(campaigns, 'cmp', () => ({ agencyId: 'agency_1' })),
     creative: crudFor(creatives, 'cr', () => ({ agencyId: 'agency_1', status: 'DRAFT' })),
+    creativeVersion: {
+      findUnique: () => null,
+      findMany: () => [],
+      findFirst: () => null,
+      create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cv_stub', createdAt: new Date(), ...data }),
+      update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cv_stub', ...data }),
+    },
+    asset: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }) },
+    user: {
+      findUnique: () => null,
+      findMany: () => [],
+    },
+    comment: { create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cm_stub', createdAt: new Date(), ...data }), findMany: () => [] },
+    magicLink: {
+      findMany: () => [],
+    },
+    emailMessage: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }) },
+    reviewEvent: { create: ({ data }: { data: Record<string, unknown> }) => ({ id: 're_stub', occurredAt: new Date(), ...data }) },
   };
   // Mirror production: $extends yields the tenanted view; the raw instance
   // stays unscoped (SessionGuard).

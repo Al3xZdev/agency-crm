@@ -107,6 +107,8 @@ function buildMockDb() {
       },
       findFirst: ({ where }: { where: Record<string, unknown> }) =>
         [...map.values()].find((r) => matchesWhere(r, where)) ?? null,
+      findUnique: ({ where }: { where: Record<string, unknown> }) =>
+        [...map.values()].find((r) => matchesWhere(r, where)) ?? null,
       findMany: ({ where }: { where?: Record<string, unknown> }) =>
         [...map.values()].filter((r) => !where || matchesWhere(r, where)),
       update: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
@@ -155,6 +157,9 @@ function buildMockDb() {
       const row = { id: `cv_${versions.size + 1}`, createdAt: new Date(), reviewStatus: 'NONE', ...data };
       versions.set(row.id as string, row);
       return row;
+    },
+    findUnique: ({ where }: { where: Record<string, unknown> }) => {
+      return [...versions.values()].find((r) => matchesWhere(r, where)) ?? null;
     },
     findFirst: ({
       where,
@@ -244,6 +249,15 @@ function buildMockDb() {
     creative: crudFor(creatives, 'cr', () => ({ agencyId: 'agency_1', status: 'DRAFT' })),
     creativeVersion: versionDelegate,
     asset: assetDelegate,
+    user: {
+      findMany: () => [],
+    },
+    magicLink: {
+      findMany: () => [],
+    },
+    comment: { create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cm_stub', createdAt: new Date(), ...data }), findMany: () => [] },
+    reviewEvent: { create: ({ data }: { data: Record<string, unknown> }) => ({ id: 're_stub', occurredAt: new Date(), ...data }) },
+    emailMessage: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }) },
   };
   (db.$extends as unknown) = () => buildTenantedView(db);
   return db;

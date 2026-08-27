@@ -203,6 +203,10 @@ function buildMockDb() {
       const row = Object.values(userRows).find((r) => matchesWhere(r, where)) ?? null;
       return row ? filterSelect(row, select) : null;
     },
+    findMany: ({ where, select }: { where?: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      const rows = Object.values(userRows).filter((r) => !where || matchesWhere(r, where));
+      return rows.map((r) => filterSelect(r, select));
+    },
   };
 
   const commentDelegate = {
@@ -247,6 +251,9 @@ function buildMockDb() {
       const row = { id: `cv_${versions.size + 1}`, createdAt: new Date(), reviewStatus: 'NONE', ...data };
       versions.set(row.id as string, row);
       return row;
+    },
+    findUnique: ({ where }: { where: Record<string, unknown> }) => {
+      return [...versions.values()].find((r) => matchesWhere(r, where)) ?? null;
     },
     findFirst: ({ where, orderBy, select }: { where: Record<string, unknown>; orderBy?: Record<string, string>; select?: Record<string, unknown> }) => {
       const hits = [...versions.values()].filter((r) => matchesWhere(r, where));
@@ -374,6 +381,9 @@ function buildMockDb() {
       findUnique: ({ where }: { where: Record<string, unknown> }) => {
         return [...links.values()].find((l) => matchesWhere(l, where)) ?? null;
       },
+      findMany: ({ where, select }: { where?: Record<string, unknown>; select?: Record<string, unknown> }) => {
+        return [...links.values()].filter((r) => !where || matchesWhere(r, where)).map((r) => select ? Object.fromEntries(Object.keys(select).map((k) => [k, r[k]])) : r);
+      },
       updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         let n = 0;
         for (const l of links.values()) {
@@ -387,6 +397,7 @@ function buildMockDb() {
     user: userDelegate,
     comment: commentDelegate,
     reviewEvent: reviewEventDelegate,
+    emailMessage: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'em_stub', ...data }) },
   };
   (db.$extends as unknown) = () => buildTenantedView(db);
   return db;

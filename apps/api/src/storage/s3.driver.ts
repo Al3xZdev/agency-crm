@@ -106,15 +106,15 @@ export class S3StorageDriver implements StorageDriver {
         if (!fetched) {
           fetched = true;
           try {
-          const resp = await client.send(
-            new GetObjectCommand({ Bucket: bucket, Key: sha256 }),
-          );
-          if (resp.Body) {
-            const bytes = await resp.Body.transformToByteArray();
-            bodyBuffer = Buffer.from(bytes);
-          } else {
-            bodyBuffer = Buffer.alloc(0);
-          }
+            const resp = await client.send(
+              new GetObjectCommand({ Bucket: bucket, Key: sha256 }),
+            );
+            if (resp.Body) {
+              const bytes = await resp.Body.transformToByteArray();
+              bodyBuffer = Buffer.from(bytes);
+            } else {
+              bodyBuffer = Buffer.alloc(0);
+            }
           } catch (err) {
             fetchError = err as Error;
           }
