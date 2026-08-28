@@ -123,6 +123,7 @@ export interface CreativeVersionSummary {
   versionNo: number;
   state: VersionState;
   reviewStatus: ReviewStatus;
+  textBody: string | null;
   createdAt: string;
 }
 
