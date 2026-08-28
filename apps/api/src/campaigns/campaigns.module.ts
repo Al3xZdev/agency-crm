@@ -21,9 +21,14 @@ const createCampaignSchema = z.object({
   name: z.string().min(1).max(120),
 });
 
-const updateCampaignSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-});
+const updateCampaignSchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    status: z.enum(['ACTIVE', 'PAUSED', 'ARCHIVED']).optional(),
+  })
+  .refine((v) => v.name !== undefined || v.status !== undefined, {
+    message: 'at least one of name or status is required',
+  });
 
 /**
  * Campaign management (task 5a.3) — nested under the owning client.
@@ -54,7 +59,7 @@ export class CampaignsService {
     if (!parent) throw new NotFoundException();
     return db.campaign.findMany({
       where: { clientId },
-      select: { id: true, clientId: true, name: true, createdAt: true },
+      select: { id: true, clientId: true, name: true, status: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -62,12 +67,15 @@ export class CampaignsService {
   async update(id: string, body: unknown) {
     const data = updateCampaignSchema.parse(body);
     const db = this.tenancy.scoped();
-    const row = await db.campaign.findFirst({ where: { id }, select: { id: true } });
+    const row = await db.campaign.findFirst({
+      where: { id },
+      select: { id: true, name: true, status: true },
+    });
     if (!row) throw new NotFoundException();
     return db.campaign.update({
       where: { id },
       data,
-      select: { id: true, name: true },
+      select: { id: true, name: true, status: true },
     });
   }
 
