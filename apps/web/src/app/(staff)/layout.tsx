@@ -1,26 +1,40 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { Sidebar } from '../../components/staff/Sidebar';
+import type { StaffUser } from '../../lib/types';
 
-const SESSION_COOKIE = 'agency_session';
+const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? 'http://localhost:3000';
 
 /**
- * Staff shell (slice 5a). Presence-only gate — the same convention as the
- * client /c surface: full session validation stays server-side in the API;
- * every data fetch re-checks auth and tenants there.
+ * Staff shell (slice 5a, upgraded). Real session validation: the layout
+ * re-checks the session SERVER-SIDE on every full page load through the
+ * same-origin API, then renders the Sidebar with the session user. The
+ * redirect lives outside the try/catch on purpose — any API failure (or
+ * missing/invalid session) falls through to /login.
  */
-export default async function StaffLayout({ children }: { children: ReactNode }) {
+async function getSession(): Promise<StaffUser | null> {
   const jar = await cookies();
-  if (!jar.get(SESSION_COOKIE)) redirect('/login');
+  try {
+    const res = await fetch(`${INTERNAL_API_URL}/api/staff/session`, {
+      headers: { cookie: jar.toString() },
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as StaffUser;
+  } catch {
+    return null;
+  }
+}
+
+export default async function StaffLayout({ children }: { children: ReactNode }) {
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   return (
-    <>
-      <nav style={{ display: 'flex', gap: 16, padding: '12px 24px', borderBottom: '1px solid #ddd' }}>
-        <strong>Ad Approval Hub</strong>
-        <Link href="/clients">Clients</Link>
-      </nav>
-      <main style={{ padding: 24 }}>{children}</main>
-    </>
+    <div className="staff-shell">
+      <Sidebar user={session} />
+      <main className="staff-main">{children}</main>
+    </div>
   );
 }

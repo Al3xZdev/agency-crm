@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 
-import { apiFetch, apiJson } from '../../../../lib/api';
+import { apiFetch, apiJson, ApiError } from '../../../../lib/api';
 
 interface CreativeDetail {
   id: string;
@@ -49,20 +49,30 @@ export default function UploadVersionPage() {
   }
 
   async function postJson<T>(path: string, body: unknown): Promise<T> {
-    const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
-    const data = (await res.json().catch(() => undefined)) as { message?: string } | undefined;
-    if (!res.ok) throw Object.assign(new Error(describeFailure(res.status, data?.message ?? '')), { status });
-    return data as T;
+    // apiFetch now parses JSON + throws ApiError; remap the status-specific
+    // copy (413 cap / 415 type) that this page bakes into its messages.
+    try {
+      return await apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw Object.assign(new Error(describeFailure(err.status, err.message)), { status: err.status });
+      }
+      throw err;
+    }
   }
 
   async function postMultipart<T>(path: string, file: File): Promise<T> {
     // No explicit Content-Type: the browser must set the multipart boundary.
     const form = new FormData();
     form.append('file', file);
-    const res = await apiFetch(path, { method: 'POST', body: form });
-    const data = (await res.json().catch(() => undefined)) as { message?: string } | undefined;
-    if (!res.ok) throw Object.assign(new Error(describeFailure(res.status, data?.message ?? '')), { status });
-    return data as T;
+    try {
+      return await apiFetch<T>(path, { method: 'POST', body: form });
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw Object.assign(new Error(describeFailure(err.status, err.message)), { status: err.status });
+      }
+      throw err;
+    }
   }
 
   const uploadFile = useMutation({

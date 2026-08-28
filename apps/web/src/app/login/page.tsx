@@ -2,13 +2,12 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-
-import { apiJson } from '../../lib/api';
+import { apiFetch, ApiError } from '../../lib/api';
 
 /**
- * Staff login (slice 5a). The API marks login @Public — no CSRF bootstrap
- * needed; the response sets the session + CSRF cookie pair and every later
- * call picks the token up via apiFetch.
+ * Staff login (slice 5a, restyled). The API marks login @Public — no CSRF
+ * bootstrap needed; the response sets the session + CSRF cookie pair and
+ * every later call picks the token up via apiFetch.
  */
 export default function LoginPage() {
   const router = useRouter();
@@ -22,50 +21,61 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await apiJson('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
+      await apiFetch('/api/auth/login', { method: 'POST', body: { email, password } });
       router.push('/clients');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof ApiError ? err.message : 'No pudimos iniciar sesión. Revisá tus credenciales.');
       setBusy(false);
     }
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: '80px auto', padding: 24 }}>
-      <h1>Staff sign in</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: '100%', padding: 8 }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: 8 }}
-          />
-        </label>
-        {error && (
-          <p role="alert" style={{ color: '#b00020', margin: 0 }}>
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={busy} style={{ padding: '10px 0' }}>
-          {busy ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div style={{ width: 360 }}>
+        <div className="brand" style={{ textAlign: 'center' }}>
+          Agencia CRM
+        </div>
+        <div className="eyebrow" style={{ textAlign: 'center', marginBottom: 24 }}>
+          proofing desk
+        </div>
+        <form className="modal" onSubmit={onSubmit} style={{ maxWidth: 360 }}>
+          <h3>Iniciar sesión</h3>
+          <div className="field" style={{ marginTop: 16 }}>
+            <label htmlFor="login-email">Correo</label>
+            <input
+              id="login-email"
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@agencia.com"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="login-password">Contraseña</label>
+            <input
+              id="login-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          {error && <p className="field-error">{error}</p>}
+          <button type="submit" className="btn primary" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
+            {busy ? 'Ingresando…' : 'Ingresar'}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
