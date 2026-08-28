@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import type { MagicLink, Session } from '@prisma/client';
+import type { MagicLink, Prisma, Session } from '@prisma/client';
 import { CONFIG } from '../config/config.module';
 import type { Env } from '../config/env.schema';
 import { SYSTEM_PRISMA } from '../prisma/system-prisma.token';
@@ -58,6 +58,41 @@ export class MagicLinksService {
     this.tenancy = tenancy;
     this.webBaseUrl = config.PUBLIC_WEB_URL.replace(/\/+$/, '');
     this.sessionTtlMs = config.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
+  }
+
+  /** Flat agency-wide listing (PR2): join Client for clientName; optional
+   * clientId filter and status = active (revokedAt IS NULL) | revoked. The
+   * token hash is never selected. */
+  async listAll(clientId?: string, status?: string) {
+    const where: Prisma.MagicLinkWhereInput = {};
+    if (clientId) where.clientId = clientId;
+    if (status === 'active') where.revokedAt = null;
+    if (status === 'revoked') where.revokedAt = { not: null };
+
+    const rows = await this.tenancy.scoped().magicLink.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        clientId: true,
+        recipientEmail: true,
+        createdAt: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        revokedAt: true,
+        client: { select: { name: true } },
+      },
+    });
+    return rows.map((link) => ({
+      id: link.id,
+      clientId: link.clientId,
+      clientName: link.client?.name ?? 'Unknown client',
+      recipientEmail: link.recipientEmail,
+      createdAt: link.createdAt,
+      expiresAt: link.expiresAt,
+      lastUsedAt: link.lastUsedAt,
+      revokedAt: link.revokedAt,
+    }));
   }
 
   async mint(

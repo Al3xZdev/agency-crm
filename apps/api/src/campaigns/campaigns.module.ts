@@ -10,7 +10,9 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
+import type { CampaignStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 import { Roles } from '../auth/roles.decorator';
@@ -29,6 +31,45 @@ const updateCampaignSchema = z
   .refine((v) => v.name !== undefined || v.status !== undefined, {
     message: 'at least one of name or status is required',
   });
+
+const campaignListQuerySchema = z.object({
+  status: z.enum(['ACTIVE', 'PAUSED', 'ARCHIVED']).optional(),
+  search: z.string().min(1).max(200).optional(),
+});
+
+/** Shared projection for every CampaignListItem-shaped response. */
+const campaignListItemSelect = {
+  id: true,
+  clientId: true,
+  name: true,
+  status: true,
+  createdAt: true,
+  client: { select: { name: true } },
+  _count: { select: { creatives: true } },
+} satisfies Prisma.CampaignSelect;
+
+type CampaignListRow = Prisma.CampaignGetPayload<{ select: typeof campaignListItemSelect }>;
+
+export interface CampaignListItem {
+  id: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  status: CampaignStatus;
+  creativesCount: number;
+  createdAt: Date;
+}
+
+export interface CreativeSummary {
+  id: string;
+  title: string;
+  kind: string;
+  status: string;
+  currentVersionNo: number;
+  updatedAt: Date;
+}
+
+export type CampaignDetail = CampaignListItem & { creatives: CreativeSummary[] };
 
 /**
  * Campaign management (task 5a.3) — nested under the owning client.
@@ -64,7 +105,79 @@ export class CampaignsService {
     });
   }
 
-  async update(id: string, body: unknown) {
+  private mapListItem(row: CampaignListRow): CampaignListItem {
+    return {
+      id: row.id,
+      clientId: row.clientId,
+      clientName: row.client?.name ?? 'Unknown client',
+      name: row.name,
+      status: row.status,
+      creativesCount: row._count?.creatives ?? 0,
+      createdAt: row.createdAt,
+    };
+  }
+
+  /** Flat agency-wide listing (PR2): join Client for clientName, count
+   * scoped creatives for creativesCount; optional enum status + case-
+   * insensitive search over campaign name OR client name. */
+  async listAll(status?: string, search?: string): Promise<CampaignListItem[]> {
+    const where: Prisma.CampaignWhereInput = {};
+    if (status) where.status = status as CampaignStatus;
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { client: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+    const rows = await this.tenancy.scoped().campaign.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      select: campaignListItemSelect,
+    });
+    return rows.map((row) => this.mapListItem(row));
+  }
+
+  /** Campaign detail (PR2): CampaignListItem + creatives with currentVersionNo
+   * = max versionNo of each creative (0 when the creative has no versions). */
+  async getDetail(id: string): Promise<CampaignDetail> {
+    const db = this.tenancy.scoped();
+    const row = await db.campaign.findFirst({
+      where: { id },
+      select: campaignListItemSelect,
+    });
+    if (!row) throw new NotFoundException();
+
+    const creatives = await db.creative.findMany({
+      where: { campaignId: id },
+      select: { id: true, title: true, kind: true, status: true, updatedAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const creativeIds = creatives.map((c) => c.id);
+    const versions = creativeIds.length
+      ? await db.creativeVersion.findMany({
+          where: { creativeId: { in: creativeIds } },
+          select: { creativeId: true, versionNo: true },
+        })
+      : [];
+    const maxVersionNo = new Map<string, number>();
+    for (const v of versions) {
+      maxVersionNo.set(v.creativeId, Math.max(maxVersionNo.get(v.creativeId) ?? 0, v.versionNo));
+    }
+
+    return {
+      ...this.mapListItem(row),
+      creatives: creatives.map((c) => ({
+        id: c.id,
+        title: c.title,
+        kind: c.kind,
+        status: c.status,
+        currentVersionNo: maxVersionNo.get(c.id) ?? 0,
+        updatedAt: c.updatedAt,
+      })),
+    };
+  }
+
+  async update(id: string, body: unknown): Promise<CampaignListItem> {
     const data = updateCampaignSchema.parse(body);
     const db = this.tenancy.scoped();
     const row = await db.campaign.findFirst({
@@ -72,11 +185,15 @@ export class CampaignsService {
       select: { id: true, name: true, status: true },
     });
     if (!row) throw new NotFoundException();
-    return db.campaign.update({
+    await db.campaign.update({ where: { id }, data });
+    // Re-read with the list projection so PATCH answers a full
+    // CampaignListItem (clientName + creativesCount), per PR2 contract.
+    const updated = await db.campaign.findFirst({
       where: { id },
-      data,
-      select: { id: true, name: true, status: true },
+      select: campaignListItemSelect,
     });
+    if (!updated) throw new NotFoundException();
+    return this.mapListItem(updated);
   }
 
   async remove(id: string): Promise<{ ok: true }> {
@@ -106,6 +223,19 @@ export class CampaignsController {
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   list(@Param('clientId') clientId: string) {
     return this.campaigns.listByClient(clientId);
+  }
+
+  @Get('campaigns')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  listAll(@Query() query: unknown) {
+    const parsed = campaignListQuerySchema.parse(query);
+    return this.campaigns.listAll(parsed.status, parsed.search);
+  }
+
+  @Get('campaigns/:id')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  detail(@Param('id') id: string) {
+    return this.campaigns.getDetail(id);
   }
 
   @Patch('campaigns/:id')
