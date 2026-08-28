@@ -3,24 +3,39 @@ import Link from 'next/link';
 export const metadata = { title: 'Invalid link' };
 
 /**
- * The SINGLE generic failure page (task 4.4): unknown, expired and revoked
- * links all land here — deliberately indistinguishable.
+ * The SINGLE generic failure page (PR5 restyle): unknown, expired and revoked
+ * links all land here — deliberately indistinguishable. Same copy and
+ * behavior, design-system styling.
  */
 export default function InvalidLinkPage() {
   return (
-    <main className="flex min-h-svh items-center justify-center bg-neutral-50 p-6">
-      <div className="w-full max-w-md rounded-lg border border-neutral-200 bg-white p-8 text-center">
-        <h1 className="text-lg font-semibold text-neutral-900">This link is not valid</h1>
-        <p className="mt-2 text-sm text-neutral-500">
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <div className="settings-card" style={{ maxWidth: 440, width: '100%', textAlign: 'center' }}>
+        <i
+          className="ti ti-link-off"
+          aria-hidden="true"
+          style={{ fontSize: 30, color: 'var(--red)', marginBottom: 10 }}
+        />
+        <h3 style={{ marginTop: 0 }}>This link is not valid</h3>
+        <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>
           It may have expired or been revoked. Ask your account contact for a new one.
         </p>
         <Link
           href="/"
-          className="mt-6 inline-block text-sm font-medium text-neutral-900 underline underline-offset-4"
+          className="btn primary"
+          style={{ display: 'inline-flex', marginTop: 18, textDecoration: 'none' }}
         >
           Go home
         </Link>
       </div>
-    </main>
+    </div>
   );
 }
