@@ -7,12 +7,13 @@ import { useLogout } from '../../lib/auth';
 import { roleLabel } from '../../lib/roles';
 import type { StaffUser } from '../../lib/types';
 
-const NAV_ITEMS: { href: string; label: string; icon: string }[] = [
+const NAV_ITEMS: { href: string; label: string; icon: string; roles?: StaffUser['role'][] }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
   { href: '/clients', label: 'Clientes', icon: 'ti ti-users' },
   { href: '/campaigns', label: 'Campañas', icon: 'ti ti-bullhorn' },
   { href: '/creatives', label: 'Creativos', icon: 'ti ti-photo' },
-  { href: '/magic-links', label: 'Magic Links', icon: 'ti ti-link' },
+  // GET /api/magic-links is SUPER_ADMIN/ACCOUNT_MANAGER only — hide the link otherwise.
+  { href: '/magic-links', label: 'Magic Links', icon: 'ti ti-link', roles: ['SUPER_ADMIN', 'ACCOUNT_MANAGER'] },
   { href: '/settings', label: 'Ajustes', icon: 'ti ti-settings' },
 ];
 
@@ -35,7 +36,7 @@ export function Sidebar({ user }: { user: StaffUser }) {
       <div className="brand">Agencia CRM</div>
       <div className="brand-sub">proofing desk</div>
       <nav>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user.role)).map((item) => (
           <Link key={item.href} href={item.href} className={`nav-link ${pathname.startsWith(item.href) ? 'active' : ''}`}>
             <i className={item.icon} />
             {item.label}

@@ -60,16 +60,16 @@ function formatDecision(d: string): string {
   }
 }
 
-function decisionBadge(d: string): string {
+function decisionPill(d: string): { label: string; className: string } {
   switch (d) {
     case 'APPROVED':
-      return 'bg-green-100 text-green-800';
+      return { label: 'approved', className: 'pill approved' };
     case 'REJECTED':
-      return 'bg-red-100 text-red-800';
+      return { label: 'rejected', className: 'pill rejected' };
     case 'REQUEST_CHANGES':
-      return 'bg-orange-100 text-orange-800';
+      return { label: 'changes requested', className: 'pill pending' };
     default:
-      return 'bg-neutral-100 text-neutral-700';
+      return { label: d.replace(/_/g, ' '), className: 'pill processing' };
   }
 }
 
@@ -79,6 +79,13 @@ function describeAnchor(c: CommentRow): string {
   return '';
 }
 
+/**
+ * Client version review (PR5 restyle). Keeps the EXACT client-scoped API
+ * calls — GET /api/c/versions/:id, POST /api/c/versions/:id/comments,
+ * POST /api/c/versions/:id/decision — and the CLIENT session semantics.
+ * The comment form posts to the client route (NOT the staff CommentThread
+ * route); only the styling changes.
+ */
 export default function ClientVersionReviewPage() {
   const params = useParams<{ id: string }>();
   const versionId = params.id;
@@ -125,22 +132,23 @@ export default function ClientVersionReviewPage() {
 
   if (version.isLoading) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="h-6 w-48 animate-pulse rounded bg-neutral-200" />
-        <div className="mt-4 h-64 animate-pulse rounded-lg bg-neutral-200" />
+      <main style={{ maxWidth: 760, margin: '0 auto', padding: '32px 28px' }}>
+        <div className="skeleton-row" style={{ height: 26, borderRadius: 6 }} />
+        <div className="skeleton-row" style={{ height: 320, borderRadius: 6, marginTop: 20 }} />
       </main>
     );
   }
 
   if (version.isError) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
-        <p className="text-sm text-red-600" role="alert">
-          Version not found.
-        </p>
-        <Link href="/c" className="mt-4 inline-block text-sm text-blue-600 hover:underline">
-          Back to dashboard
-        </Link>
+      <main style={{ maxWidth: 760, margin: '0 auto', padding: '32px 28px' }}>
+        <div className="empty-state">
+          <i className="ti ti-photo-off" aria-hidden="true" />
+          <p>Version not found.</p>
+          <Link href="/c" className="btn ghost" style={{ textDecoration: 'none' }}>
+            &larr; Back to dashboard
+          </Link>
+        </div>
       </main>
     );
   }
@@ -149,146 +157,155 @@ export default function ClientVersionReviewPage() {
   const hasDecision = v.reviewEvent != null;
   const decisionBusy = castDecision.isPending;
   const mediaUrl = v.asset ? `/api/media/${v.asset.storageKey}` : null;
+  const statusPill = decisionPill(hasDecision && v.reviewEvent ? v.reviewEvent.decision : v.reviewStatus);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/c" className="mb-6 inline-block text-sm text-neutral-500 hover:text-neutral-800">
+    <main style={{ maxWidth: 760, margin: '0 auto', padding: '32px 28px' }}>
+      <Link href="/c" className="link-btn" style={{ display: 'inline-block', marginBottom: 18 }}>
         &larr; Dashboard
       </Link>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-900">{v.creativeTitle}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Version {v.versionNo} &middot; {new Date(v.createdAt).toLocaleDateString()}
-          </p>
+      <div className="client-header" style={{ marginBottom: 22 }}>
+        <div className="client-id">
+          <div className="avatar">{'V'}</div>
+          <div>
+            <h1 style={{ fontSize: 18 }}>{v.creativeTitle}</h1>
+            <p className="eyebrow" style={{ margin: '4px 0 0' }}>
+              Version {v.versionNo} &middot; {new Date(v.createdAt).toLocaleDateString()}
+            </p>
+          </div>
         </div>
-        <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-700">
-          {v.reviewStatus.replace(/_/g, ' ')}
-        </span>
+        <span className={statusPill.className}>{statusPill.label}</span>
       </div>
 
       {/* Media preview */}
       {v.state === 'READY' && v.asset && v.asset.mime.startsWith('image') && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <div className="settings-card" style={{ maxWidth: '100%', overflow: 'hidden', padding: 0 }}>
           <img
             src={v.posterUrl || mediaUrl || undefined}
             alt={`${v.creativeTitle} v${v.versionNo}`}
-            className="w-full object-contain"
-            style={{ maxHeight: 500 }}
+            style={{ width: '100%', objectFit: 'contain', maxHeight: 500, display: 'block' }}
           />
         </div>
       )}
 
       {v.state === 'READY' && v.asset && v.asset.mime.startsWith('video') && (
-        <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white">
+        <div className="settings-card" style={{ maxWidth: '100%', overflow: 'hidden', padding: 0 }}>
           <video
             src={mediaUrl || undefined}
             poster={v.posterUrl || undefined}
             controls
-            className="w-full"
-            style={{ maxHeight: 500 }}
+            style={{ width: '100%', maxHeight: 500, display: 'block' }}
           />
         </div>
       )}
 
       {v.state === 'READY' && v.textBody && (
-        <div className="mt-6 whitespace-pre-wrap rounded-lg border border-neutral-200 bg-white p-5 text-sm text-neutral-800">
+        <div className="settings-card" style={{ maxWidth: '100%', whiteSpace: 'pre-wrap' }}>
           {v.textBody}
         </div>
       )}
 
       {v.state === 'FAILED' && (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Generation failed{v.failReason ? `: ${v.failReason}` : ''}
+        <div className="error-banner" style={{ marginTop: 20 }}>
+          <span>
+            Generation failed{v.failReason ? `: ${v.failReason}` : ''}
+          </span>
         </div>
       )}
 
       {/* Comments */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-neutral-900">
+      <section className="settings-card" style={{ maxWidth: '100%', marginTop: 24 }}>
+        <h3 style={{ fontSize: 15 }}>
           Comments ({v.commentsCount})
-        </h2>
+        </h3>
 
         {v.comments.length === 0 && (
-          <p className="mt-3 text-sm text-neutral-500">No comments yet.</p>
+          <p className="eyebrow" style={{ marginTop: 12 }}>
+            No comments yet.
+          </p>
         )}
 
-        <ul className="mt-3 divide-y divide-neutral-100">
+        <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0' }}>
           {v.comments.map((c) => (
-            <li key={c.id} className="py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-neutral-900">{c.authorLabel}</span>
-                <span className="text-xs text-neutral-400">{c.authorType}</span>
-                <span className="text-xs text-neutral-400">{describeAnchor(c)}</span>
-                <span className="ml-auto text-xs text-neutral-400">
+            <li key={c.id} className="comment" style={{ borderBottom: '1px solid var(--paper-line)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="who">{c.authorLabel}</span>
+                <span className="when">{c.authorType}</span>
+                <span className="when">{describeAnchor(c)}</span>
+                <span className="when" style={{ marginLeft: 'auto' }}>
                   {new Date(c.createdAt).toLocaleString()}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-neutral-700">{c.body}</p>
+              <p className="txt" style={{ margin: '6px 0 0' }}>{c.body}</p>
             </li>
           ))}
         </ul>
 
-        <form onSubmit={onComment} className="mt-4 flex gap-2">
+        <form onSubmit={onComment} style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <textarea
             rows={2}
             required
             placeholder="Add a comment\u2026"
             value={commentBody}
             onChange={(e) => setCommentBody(e.target.value)}
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            style={{
+              flex: 1,
+              border: '1px solid var(--paper-line)',
+              borderRadius: 'var(--radius)',
+              padding: '8px 10px',
+              fontSize: 13,
+              background: '#fff',
+              fontFamily: 'var(--sans)',
+              resize: 'vertical',
+            }}
           />
-          <button
-            type="submit"
-            disabled={addComment.isPending}
-            className="self-end rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+          <button type="submit" className="btn primary" disabled={addComment.isPending} style={{ alignSelf: 'flex-end' }}>
             {addComment.isPending ? 'Posting\u2026' : 'Post'}
           </button>
         </form>
 
         {commentError && (
-          <p className="mt-2 text-sm text-red-600" role="alert">
+          <p className="field-error" style={{ marginTop: 10 }}>
             {commentError}
           </p>
         )}
       </section>
 
       {/* Decision */}
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold text-neutral-900">Decision</h2>
+      <section className="settings-card" style={{ maxWidth: '100%', marginTop: 24 }}>
+        <h3 style={{ fontSize: 15 }}>Decision</h3>
 
-        {hasDecision ? (
-          <div className="mt-3 flex items-center gap-2">
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${decisionBadge(v.reviewEvent!.decision)}`}>
-              {formatDecision(v.reviewEvent!.decision)}
+        {hasDecision && v.reviewEvent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+            <span className={decisionPill(v.reviewEvent.decision).className}>
+              {formatDecision(v.reviewEvent.decision)}
             </span>
-            <span className="text-xs text-neutral-400">
-              by {v.reviewEvent!.actorLabel} &middot;{' '}
-              {new Date(v.reviewEvent!.occurredAt).toLocaleString()}
+            <span className="eyebrow">
+              by {v.reviewEvent.actorLabel} &middot; {new Date(v.reviewEvent.occurredAt).toLocaleString()}
             </span>
           </div>
         ) : (
-          <div className="mt-3 flex gap-3">
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button
               disabled={decisionBusy}
               onClick={() => castDecision.mutate('APPROVED')}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              className="btn green"
             >
               {decisionBusy ? 'Saving\u2026' : 'Approve \u2713'}
             </button>
             <button
               disabled={decisionBusy}
               onClick={() => castDecision.mutate('REJECTED')}
-              className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              className="btn red"
             >
               {decisionBusy ? 'Saving\u2026' : 'Reject \u2715'}
             </button>
             <button
               disabled={decisionBusy}
               onClick={() => castDecision.mutate('REQUEST_CHANGES')}
-              className="rounded-md bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              className="btn"
+              style={{ background: 'var(--amber-bg)', borderColor: 'var(--amber)', color: 'var(--amber)' }}
             >
               {decisionBusy ? 'Saving\u2026' : 'Request Changes \u21BA'}
             </button>
@@ -296,7 +313,7 @@ export default function ClientVersionReviewPage() {
         )}
 
         {castDecision.isError && (
-          <p className="mt-2 text-sm text-red-600" role="alert">
+          <p className="field-error" style={{ marginTop: 12 }}>
             {castDecision.error.message}
           </p>
         )}

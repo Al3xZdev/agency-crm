@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-/** Staff home: straight to the working surface for now. */
+/** Staff home: dashboard (deferred from PR3 to PR5). */
 export default function StaffHome() {
-  redirect('/clients');
+  redirect('/dashboard');
 }

@@ -190,3 +190,12 @@ export interface DashboardActivity {
   items: ActivityItem[];
   nextCursor: string | null;
 }
+
+// ---- agency ----
+
+/** GET/PATCH /api/agency — current agency settings (single-agency). */
+export interface Agency {
+  id: string;
+  name: string;
+  createdAt: string;
+}
