@@ -121,6 +121,24 @@ export class ClientService {
     if (version.clientId !== clientId) throw new ForbiddenException();
 
     const { reviewEvents, comments, creative, ...rest } = version;
+
+    // Sibling versions of the SAME creative, ordered by versionNo asc. The
+    // current version is excluded; previous = the one immediately before it,
+    // next = immediately after. If only one version exists, both are null.
+    const siblings = await db.creativeVersion.findMany({
+      where: { creativeId: rest.creativeId, id: { not: rest.id } },
+      select: { id: true, versionNo: true },
+      orderBy: { versionNo: 'asc' },
+    });
+    const previous =
+      siblings
+        .filter((s) => s.versionNo < rest.versionNo)
+        .sort((a, b) => b.versionNo - a.versionNo)[0] ?? null;
+    const next =
+      siblings
+        .filter((s) => s.versionNo > rest.versionNo)
+        .sort((a, b) => a.versionNo - b.versionNo)[0] ?? null;
+
     return {
       ...rest,
       creativeTitle: creative?.title ?? 'Untitled',
@@ -128,6 +146,7 @@ export class ClientService {
       comments,
       commentsCount: comments.length,
       reviewEvent: reviewEvents[0] ?? null,
+      siblingVersions: { previous, next },
     };
   }
 }
