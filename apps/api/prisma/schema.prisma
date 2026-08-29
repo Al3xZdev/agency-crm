@@ -178,12 +178,16 @@ model MagicLink {
 // ---- hierarchy ----
 
 model Client {
-  id        String   @id @default(cuid())
-  agencyId  String
-  name      String
-  email     String?  // direct client email for notifications
-  contact   String?  // phone / other contact info
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  agencyId    String
+  name        String
+  email       String?  // direct client email for notifications
+  contact     String?  // phone / other contact info (legacy)
+  contactName String?  // primary contact person's name
+  phone       String?  // phone / whatsapp
+  industry    String?  // free-text rubro/industry
+  notes       String?  // internal notes
+  createdAt   DateTime @default(now())
 
   agency           Agency            @relation(fields: [agencyId], references: [id])
   campaigns        Campaign[]

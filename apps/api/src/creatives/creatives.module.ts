@@ -10,6 +10,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -18,6 +19,13 @@ import { currentPrincipal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
 
 const CREATIVE_KINDS = ['IMAGE', 'VIDEO', 'TEXT'] as const;
+const CREATIVE_STATUSES = ['DRAFT', 'PROCESSING', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'UPLOAD_FAILED'] as const;
+
+const listAllQuerySchema = z.object({
+  search: z.string().max(160).optional(),
+  status: z.enum(CREATIVE_STATUSES).optional(),
+  kind: z.enum(CREATIVE_KINDS).optional(),
+});
 
 const createCreativeSchema = z.object({
   title: z.string().min(1).max(160),
@@ -75,6 +83,40 @@ export class CreativesService {
     });
   }
 
+  async listAll(query: unknown) {
+    const data = listAllQuerySchema.parse(query);
+    const where: Record<string, unknown> = {};
+    if (data.status) where.status = data.status;
+    if (data.kind) where.kind = data.kind;
+    if (data.search?.trim()) where.title = { contains: data.search.trim(), mode: 'insensitive' };
+
+    const rows = await this.tenancy.scoped().creative.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        kind: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        client: { select: { name: true } },
+        campaign: { select: { name: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      kind: r.kind,
+      status: r.status,
+      clientName: r.client.name,
+      campaignName: r.campaign.name,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
+  }
+
   async get(id: string) {
     const row = await this.tenancy.scoped().creative.findFirst({
       where: { id },
@@ -124,6 +166,12 @@ export class CreativesController {
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   list(@Param('campaignId') campaignId: string) {
     return this.creatives.listByCampaign(campaignId);
+  }
+
+  @Get('creatives')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  listAll(@Query() query: unknown) {
+    return this.creatives.listAll(query);
   }
 
   @Get('creatives/:id')

@@ -17,10 +17,26 @@ import { Roles } from '../auth/roles.decorator';
 import { currentPrincipal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
 
+const optionalString = z
+  .string()
+  .max(200)
+  .optional()
+  .transform((v) => {
+    const trimmed = typeof v === 'string' ? v.trim() : v;
+    return trimmed === '' ? undefined : trimmed;
+  });
+
 const createClientSchema = z.object({
-  name: z.string().min(1).max(120),
-  email: z.string().email().max(200).optional(),
-  contact: z.string().max(200).optional(),
+  name: z.string().min(1).max(120).transform((v) => v.trim()),
+  contactName: optionalString,
+  email: optionalString.refine(
+    (v) => v === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+    'Email de contacto inválido',
+  ),
+  contact: optionalString,
+  phone: optionalString,
+  industry: optionalString,
+  notes: optionalString,
 });
 
 const updateClientSchema = z.object({
@@ -41,7 +57,7 @@ export class ClientsService {
 
   async list() {
     return this.tenancy.scoped().client.findMany({
-      select: { id: true, name: true, email: true, contact: true, createdAt: true },
+      select: { id: true, name: true, email: true, contact: true, contactName: true, phone: true, industry: true, notes: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -52,7 +68,7 @@ export class ClientsService {
     const db = this.tenancy.scoped();
     const row = await db.client.findFirst({
       where: { id },
-      select: { id: true, name: true, email: true, contact: true, createdAt: true },
+      select: { id: true, name: true, email: true, contact: true, contactName: true, phone: true, industry: true, notes: true, createdAt: true },
     });
     if (!row) throw new NotFoundException();
 
@@ -85,7 +101,16 @@ export class ClientsService {
     const principal = currentPrincipal();
     if (!principal) throw new NotFoundException();
     return this.tenancy.scoped().client.create({
-      data: { agencyId: principal.agencyId, name: data.name, email: data.email ?? null, contact: data.contact ?? null },
+      data: {
+        agencyId: principal.agencyId,
+        name: data.name,
+        contactName: data.contactName ?? null,
+        email: data.email ?? null,
+        contact: data.contact ?? null,
+        phone: data.phone ?? null,
+        industry: data.industry ?? null,
+        notes: data.notes ?? null,
+      },
       select: { id: true },
     });
   }
