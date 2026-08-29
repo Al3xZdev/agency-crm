@@ -54,6 +54,10 @@ export interface Client {
   name: string;
   email: string | null;
   contact: string | null;
+  contactName: string | null;
+  phone: string | null;
+  industry: string | null;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -99,6 +103,18 @@ export interface CreativeSummary {
 }
 
 // ---- creatives ----
+
+/** GET /api/creatives — agency-wide aggregate list row. */
+export interface CreativeListItem {
+  id: string;
+  title: string;
+  kind: CreativeKind;
+  status: CreativeStatus;
+  clientName: string;
+  campaignName: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /** GET /api/creatives/:id — backend detail shape. */
 export interface Creative {

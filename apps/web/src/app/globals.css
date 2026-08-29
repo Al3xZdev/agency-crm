@@ -172,7 +172,7 @@ h1, h2, h3 {
 .stat-card .l { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
 /* ---- lists / tables ---- */
-.list-card { background: var(--paper-2); border: 1px solid var(--paper-line); border-radius: 6px; overflow: hidden; }
+.list-card { background: var(--paper-2); border: 1px solid var(--paper-line); border-radius: 6px; overflow: visible; }
 .list-row {
   display: grid;
   grid-template-columns: 2fr 1.4fr 70px 130px 60px;
@@ -182,7 +182,8 @@ h1, h2, h3 {
   border-bottom: 1px solid var(--paper-line);
   font-size: 13px;
 }
-.list-row:last-child { border-bottom: none; }
+.list-row:first-child { border-top-left-radius: 6px; border-top-right-radius: 6px; }
+.list-row:last-child { border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; border-bottom: none; }
 .list-row .muted { color: var(--text-dim); }
 .list-row .mono { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
 .list-head { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
@@ -380,3 +381,13 @@ h1, h2, h3 {
 .users-row { grid-template-columns: 1.4fr 1.6fr 1fr 90px 110px; position: relative; }
 .users-row.inactive { opacity: 0.55; }
 .role-menu-wrap { position: relative; }
+
+/* ---- creatives (list) ---- */
+.creatives-row { grid-template-columns: 1.6fr 1.2fr 1.2fr 90px 110px 120px; }
+.creative-name-cell { font-weight: 500; }
+
+/* ---- client modal (two-column + collapsible details) ---- */
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.more-details-toggle { display: flex; align-items: center; gap: 4px; font-size: 12px; margin: 4px 0 14px; }
+.more-details { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; padding: 14px; background: var(--paper); border-radius: var(--radius); border: 1px solid var(--paper-line); }
+.more-details .field { margin-bottom: 0; }
