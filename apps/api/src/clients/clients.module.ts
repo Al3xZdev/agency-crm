@@ -46,6 +46,40 @@ export class ClientsService {
     });
   }
 
+  /** Client detail (PR2): client fields + campaigns with creativesCount,
+   * activeCampaigns count and totalCreatives across all its campaigns. */
+  async getDetail(id: string) {
+    const db = this.tenancy.scoped();
+    const row = await db.client.findFirst({
+      where: { id },
+      select: { id: true, name: true, email: true, contact: true, createdAt: true },
+    });
+    if (!row) throw new NotFoundException();
+
+    const campaigns = await db.campaign.findMany({
+      where: { clientId: id },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        _count: { select: { creatives: true } },
+      },
+    });
+    const summary = campaigns.map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      creativesCount: c._count.creatives,
+    }));
+    return {
+      ...row,
+      campaigns: summary,
+      activeCampaigns: summary.filter((c) => c.status === 'ACTIVE').length,
+      totalCreatives: summary.reduce((sum, c) => sum + c.creativesCount, 0),
+    };
+  }
+
   async create(body: unknown): Promise<{ id: string }> {
     const data = createClientSchema.parse(body);
     const principal = currentPrincipal();
@@ -92,6 +126,12 @@ export class ClientsController {
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   list() {
     return this.clients.list();
+  }
+
+  @Get(':id')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  detail(@Param('id') id: string) {
+    return this.clients.getDetail(id);
   }
 
   @Post()

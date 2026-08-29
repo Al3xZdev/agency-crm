@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Inject, Param, Post, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { currentPrincipal } from '../tenancy/request-context.als';
@@ -15,6 +15,11 @@ const mintSchema = z.object({
 });
 
 const redeemSchema = z.object({ token: z.string().min(20).max(200) });
+
+const listSchema = z.object({
+  clientId: z.string().min(1).max(200).optional(),
+  status: z.enum(['active', 'revoked']).optional(),
+});
 
 /** Uniform failure body — unknown/expired/revoked are indistinguishable. */
 const INVALID = { statusCode: 401, message: 'INVALID_LINK' };
@@ -35,6 +40,14 @@ export class MagicLinksController {
   ): Promise<{ id: string; url: string; expiresAt: Date | null }> {
     const input = mintSchema.parse(body ?? {});
     return this.magicLinks.mint(currentPrincipal()!, clientId, input);
+  }
+
+  /** Flat listing (PR2) — SUPER_ADMIN/ACCOUNT_MANAGER only, per spec. */
+  @Get('magic-links')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER')
+  async listAll(@Query() query: unknown) {
+    const parsed = listSchema.parse(query);
+    return this.magicLinks.listAll(parsed.clientId, parsed.status);
   }
 
   @Post('magic-links/:id/revoke')
