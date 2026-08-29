@@ -31,6 +31,12 @@ enum CreativeKind {
   TEXT
 }
 
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
 // UPLOAD_FAILED is staff-visible only (spec amendment 2026-08-24).
 enum CreativeStatus {
   DRAFT
@@ -189,11 +195,12 @@ model Client {
 }
 
 model Campaign {
-  id        String   @id @default(cuid())
+  id        String         @id @default(cuid())
   agencyId  String
   clientId  String
   name      String
-  createdAt DateTime @default(now())
+  status    CampaignStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
 
   client    Client     @relation(fields: [clientId], references: [id])
   agency    Agency     @relation(fields: [agencyId], references: [id])
@@ -292,6 +299,7 @@ model Comment {
   startMs      Int?
   endMs        Int?
   body         String        @db.Text
+  resolved     Boolean       @default(false)
   createdAt    DateTime      @default(now()) // append-only: NO update/delete routes exist
 
   version    CreativeVersion @relation(fields: [versionId], references: [id])

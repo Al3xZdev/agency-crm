@@ -17,6 +17,8 @@ import { VersionsModule } from './versions/versions.module';
 import { CommentsModule } from './comments/comments.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { ClientModule } from './client/client.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { AgencyModule } from './agency/agency.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SessionGuard } from './auth/session.guard';
 import { CsrfGuard } from './auth/csrf.guard';
@@ -32,7 +34,7 @@ import { AppHeadersModule } from './common/app-headers.module';
  * interceptor is what scopes the principal for controllers and services.
  */
 @Module({
-  imports: [ConfigModule, PrismaModule, TenancyModule, AppHeadersModule, HealthModule, AuthModule, MagicLinksModule, StaffModule, ClientsModule, CampaignsModule, CreativesModule, UploadsModule, JobsModule, MediaModule, VersionsModule, CommentsModule, ReviewsModule, ClientModule, NotificationsModule],
+  imports: [ConfigModule, PrismaModule, TenancyModule, AppHeadersModule, HealthModule, AuthModule, MagicLinksModule, StaffModule, ClientsModule, CampaignsModule, CreativesModule, UploadsModule, JobsModule, MediaModule, VersionsModule, CommentsModule, ReviewsModule, ClientModule, DashboardModule, AgencyModule, NotificationsModule],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: SessionGuard },
