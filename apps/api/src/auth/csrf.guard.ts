@@ -41,7 +41,7 @@ export class CsrfGuard implements CanActivate {
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(CONFIG) config: Env,
   ) {
-    this.csrfCookieName = cookiePolicy(config.NODE_ENV).csrfName;
+    this.csrfCookieName = cookiePolicy(config).csrfName;
   }
 
   canActivate(context: ExecutionContext): boolean {

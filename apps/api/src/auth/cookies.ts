@@ -13,15 +13,24 @@ export interface CookiePolicy {
   readonly secure: boolean;
   readonly sessionName: string;
   readonly csrfName: string;
+  /** The alternate CSRF cookie name (the one the OTHER cookie mode uses).
+   *  Issuers must expire it alongside the current one so a policy switch
+   *  (Secure→plain-http or vice versa) cannot leave a stale token that the
+   *  client keeps echoing: a stale `__Host-csrf` next to `agency_csrf` makes
+   *  apiFetch send the wrong header and every mutation 403s. */
+  readonly legacyCsrfName: string;
 }
 
 export const SESSION_COOKIE = 'agency_session';
+export const CSRF_SECURE_NAME = '__Host-csrf';
+export const CSRF_PLAIN_NAME = 'agency_csrf';
 
-export function cookiePolicy(nodeEnv: Env['NODE_ENV']): CookiePolicy {
-  const production = nodeEnv === 'production';
+export function cookiePolicy(config: Pick<Env, 'NODE_ENV' | 'COOKIE_SECURE'>): CookiePolicy {
+  const secure = config.COOKIE_SECURE ?? config.NODE_ENV === 'production';
   return {
-    secure: production,
+    secure,
     sessionName: SESSION_COOKIE,
-    csrfName: production ? '__Host-csrf' : 'agency_csrf',
+    csrfName: secure ? CSRF_SECURE_NAME : CSRF_PLAIN_NAME,
+    legacyCsrfName: secure ? CSRF_PLAIN_NAME : CSRF_SECURE_NAME,
   };
 }

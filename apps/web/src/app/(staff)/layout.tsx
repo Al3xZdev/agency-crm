@@ -16,7 +16,7 @@ const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? 'http://localhost:3000'
 async function getSession(): Promise<StaffUser | null> {
   const jar = await cookies();
   try {
-    const res = await fetch(`${INTERNAL_API_URL}/api/staff/session`, {
+    const res = await fetch(`${INTERNAL_API_URL}/staff/session`, {
       headers: { cookie: jar.toString() },
       cache: 'no-store',
     });

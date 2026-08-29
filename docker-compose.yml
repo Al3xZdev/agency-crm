@@ -52,6 +52,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       PORT: 3000
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-7}

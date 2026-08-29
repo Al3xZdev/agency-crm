@@ -6,6 +6,13 @@ import { z } from 'zod';
  */
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  /** Explicit auth-cookie Secure flag. Unset → "production" implies Secure
+   *  (and the __Host- CSRF name); set to "false" for plain-http dev/LAN
+   *  stacks so browsers actually keep the session cookie. */
+  COOKIE_SECURE: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().positive().default(3000),
   SESSION_TTL_DAYS: z.coerce.number().int().positive().default(7),
