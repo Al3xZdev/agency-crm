@@ -38,22 +38,39 @@ export function setSessionCookies(
   // Expire the alternate-mode CSRF cookie so a token minted under the other
   // policy (e.g. `__Host-csrf` from a previous production-mode login) can
   // never linger alongside the newly issued one.
-  expireCookie(res, policy.legacyCsrfName, false, policy.secure);
+  expireCookie(res, policy.legacyCsrfName, false);
 }
 
-function expireCookie(res: Response, name: string, httpOnly: boolean, secure: boolean): void {
+/**
+ * Expire a cookie by name. ALWAYS sends the Secure attribute: a cookie stored
+ * with Secure (e.g. `__Host-csrf` minted under production mode) can only be
+ * overwritten/deleted by a Set-Cookie that also carries Secure — a plain-http
+ * wipe is silently ignored, leaving the stale token alive (that was the 403
+ * source). Browsers accept Secure Set-Cookie on http://localhost.
+ */
+function expireCookie(res: Response, name: string, httpOnly: boolean): void {
   res.cookie(name, '', {
     httpOnly,
     sameSite: 'lax',
-    secure,
+    secure: true,
     path: '/',
     expires: new Date(0),
   });
 }
 
+/**
+ * Self-healing expiry of the alternate-mode CSRF cookie. Called on every
+ * authenticated request (SessionGuard) as well as login/logout, so a stale
+ * `__Host-csrf` left over from a previous cookie mode is removed on the next
+ * API call — no manual cookie clearing or re-login required.
+ */
+export function expireLegacyCsrfCookie(res: Response, config: Pick<Env, 'NODE_ENV' | 'COOKIE_SECURE'>): void {
+  expireCookie(res, cookiePolicy(config).legacyCsrfName, false);
+}
+
 export function clearSessionCookies(res: Response, config: Pick<Env, 'NODE_ENV' | 'COOKIE_SECURE'>): void {
   const policy = cookiePolicy(config);
-  expireCookie(res, policy.sessionName, true, policy.secure);
-  expireCookie(res, policy.csrfName, false, policy.secure);
-  expireCookie(res, policy.legacyCsrfName, false, policy.secure);
+  expireCookie(res, policy.sessionName, true);
+  expireCookie(res, policy.csrfName, false);
+  expireCookie(res, policy.legacyCsrfName, false);
 }

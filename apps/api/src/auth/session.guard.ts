@@ -7,10 +7,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createHash } from 'node:crypto';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { PUBLIC_KEY } from './public.decorator';
 import { parseCookies } from './parse-cookies';
 import { SESSION_COOKIE } from './cookies';
+import { expireLegacyCsrfCookie } from './session-cookies';
+import { CONFIG } from '../config/config.module';
+import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestContext } from '../tenancy/request-context.als';
 
@@ -31,7 +34,18 @@ export class SessionGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(CONFIG) private readonly config: Env,
   ) {}
+
+  private heal(req: Request, context: ExecutionContext): void {
+    // Self-healing: every authenticated response also expires the alternate
+    // CSRF cookie (with Secure, so it can actually remove a Secure cookie).
+    // A stale `__Host-csrf` left over from a previous cookie mode is wiped on
+    // the next API call — no manual cookie clearing or re-login required.
+    const res = context.switchToHttp().getResponse<Response>();
+    expireLegacyCsrfCookie(res, this.config);
+    void req;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (
@@ -69,6 +83,7 @@ export class SessionGuard implements CanActivate {
         },
         csrfSecret: session.csrfSecret,
       };
+      this.heal(req, context);
       return true;
     }
 
@@ -91,6 +106,7 @@ export class SessionGuard implements CanActivate {
         },
         csrfSecret: session.csrfSecret,
       };
+      this.heal(req, context);
       return true;
     }
 
