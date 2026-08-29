@@ -19,10 +19,12 @@ export default function RedeemPage() {
     if (attempted.current) return;
     attempted.current = true;
 
-    apiFetch('/api/magic-links/redeem', {
+    // apiFetch now parses + throws; a failed redeem lands on /c/invalid, and
+    // the 401-redirect is suppressed for /c/* paths so client portal errors
+    // render inline instead of bouncing to the staff login.
+    apiFetch<{ ok: boolean }>('/api/magic-links/redeem', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: params.token }),
+      body: { token: params.token },
     })
       .then((res) => {
         router.replace(res.ok ? '/c' : '/c/invalid');

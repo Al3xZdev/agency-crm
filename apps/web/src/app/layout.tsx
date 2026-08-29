@@ -1,16 +1,18 @@
-'use client';
+import type { Metadata } from 'next';
+import { Providers } from './providers';
+import './globals.css';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+export const metadata: Metadata = {
+  title: 'Agencia CRM',
+  description: 'Proofing desk para agencias de marketing',
+};
 
-export default function Providers({ children }: { children: ReactNode }) {
-  const [client] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: { retry: false, refetchOnWindowFocus: false },
-        },
-      }),
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="es">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
