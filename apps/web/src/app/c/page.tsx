@@ -30,23 +30,20 @@ function kindIcon(kind: CreativeRow['kind']): string {
   }
 }
 
-function statusBadge(status: string): string {
+/** Client-facing pill mapping (review status of the latest version). */
+function statusPill(status: string): { label: string; className: string } {
   switch (status) {
     case 'PENDING_REVIEW':
-      return 'bg-amber-100 text-amber-800';
+      return { label: 'pending review', className: 'pill pending' };
     case 'APPROVED':
-      return 'bg-green-100 text-green-800';
+      return { label: 'approved', className: 'pill approved' };
     case 'REJECTED':
-      return 'bg-red-100 text-red-800';
+      return { label: 'rejected', className: 'pill rejected' };
     case 'CHANGES_REQUESTED':
-      return 'bg-orange-100 text-orange-800';
+      return { label: 'changes requested', className: 'pill pending' };
     default:
-      return 'bg-neutral-100 text-neutral-700';
+      return { label: status.replace(/_/g, ' ').toLowerCase(), className: 'pill processing' };
   }
-}
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, ' ');
 }
 
 export default function ClientDashboard() {
@@ -71,57 +68,65 @@ export default function ClientDashboard() {
   const items = creatives.data ?? [];
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-neutral-900">Welcome, {clientName}</h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-neutral-500 hover:text-neutral-800"
-        >
+    <main style={{ maxWidth: 900, margin: '0 auto', padding: '36px 28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h1 style={{ fontSize: 22 }}>Welcome, {clientName}</h1>
+          <p className="eyebrow" style={{ margin: '4px 0 0' }}>
+            creativos para revisar
+          </p>
+        </div>
+        <button className="btn ghost" onClick={handleLogout}>
+          <i className="ti ti-logout" aria-hidden="true" />
           Sign out
         </button>
       </div>
 
       {creatives.isLoading && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, marginTop: 28 }}>
           {[1, 2, 3].map((n) => (
-            <div key={n} className="h-40 animate-pulse rounded-lg border border-neutral-200 bg-white" />
+            <div key={n} className="skeleton-row" style={{ height: 160, borderRadius: 6 }} />
           ))}
         </div>
       )}
 
       {creatives.isError && (
-        <p className="mt-8 text-sm text-red-600" role="alert">
-          Failed to load creatives. Please try again.
-        </p>
+        <div className="error-banner" style={{ marginTop: 28 }}>
+          <span>Failed to load creatives. Please try again.</span>
+        </div>
       )}
 
       {!creatives.isLoading && !creatives.isError && items.length === 0 && (
-        <p className="mt-8 text-sm text-neutral-500">No creatives pending review.</p>
+        <div className="empty-state" style={{ marginTop: 28 }}>
+          <i className="ti ti-photo-off" aria-hidden="true" />
+          <p>No creatives pending review.</p>
+        </div>
       )}
 
       {!creatives.isLoading && items.length > 0 && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          {items.map((c) => (
-            <Link
-              key={c.id}
-              href={`/c/versions/${c.latestVersionId}`}
-              className="block rounded-lg border border-neutral-200 bg-white p-5 transition hover:border-neutral-300 hover:shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <span>{kindIcon(c.kind)}</span>
-                <h2 className="font-medium text-neutral-900">{c.title}</h2>
-              </div>
-              <p className="mt-1 text-sm text-neutral-500">
-                Version {c.latestVersionNo}
-              </p>
-              <span
-                className={`mt-3 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(c.reviewStatus)}`}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, marginTop: 28 }}>
+          {items.map((c) => {
+            const pill = statusPill(c.reviewStatus);
+            return (
+              <Link
+                key={c.id}
+                href={`/c/versions/${c.latestVersionId}`}
+                className="client-card"
+                style={{ textDecoration: 'none' }}
               >
-                {statusLabel(c.reviewStatus)}
-              </span>
-            </Link>
-          ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 20 }}>{kindIcon(c.kind)}</span>
+                  <div className="client-card-name">{c.title}</div>
+                </div>
+                <div className="client-card-meta" style={{ marginTop: 6 }}>
+                  Version {c.latestVersionNo}
+                </div>
+                <span className={pill.className} style={{ marginTop: 12 }}>
+                  {pill.label}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </main>

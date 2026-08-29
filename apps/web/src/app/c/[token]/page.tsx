@@ -5,10 +5,11 @@ import { useParams, useRouter } from 'next/navigation';
 import { apiFetch } from '../../../lib/api';
 
 /**
- * Client magic-link redemption surface (task 4.4). The token lives in the
+ * Client magic-link redemption surface (PR5 restyle). The token lives in the
  * URL path; this page redeems it ONCE through the same-origin proxy so the
  * Set-Cookie pair lands on the browser, then redirects. Every failure mode
- * lands on the single generic /c/invalid page.
+ * lands on the single generic /c/invalid page. Same behavior, design-system
+ * styling.
  */
 export default function RedeemPage() {
   const params = useParams<{ token: string }>();
@@ -19,9 +20,6 @@ export default function RedeemPage() {
     if (attempted.current) return;
     attempted.current = true;
 
-    // apiFetch now parses + throws; a failed redeem lands on /c/invalid, and
-    // the 401-redirect is suppressed for /c/* paths so client portal errors
-    // render inline instead of bouncing to the staff login.
     apiFetch<{ ok: boolean }>('/api/magic-links/redeem', {
       method: 'POST',
       body: { token: params.token },
@@ -33,10 +31,21 @@ export default function RedeemPage() {
   }, [params.token, router]);
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-neutral-50 p-6">
-      <p className="text-sm text-neutral-500" role="status">
-        Validating your link…
-      </p>
-    </main>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <div className="settings-card" style={{ maxWidth: 380, width: '100%', textAlign: 'center' }}>
+        <i className="ti ti-loader-2" aria-hidden="true" style={{ fontSize: 26, marginBottom: 10 }} />
+        <p className="eyebrow" style={{ margin: 0 }}>
+          Validando tu vínculo…
+        </p>
+      </div>
+    </div>
   );
 }
