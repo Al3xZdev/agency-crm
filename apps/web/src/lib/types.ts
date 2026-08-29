@@ -215,3 +215,44 @@ export interface Agency {
   name: string;
   createdAt: string;
 }
+
+// ---- client portal (versions) ----
+
+/** Backend review event row embedded in the version detail. */
+export interface ReviewEvent {
+  id: string;
+  decision: ReviewDecision;
+  actorType: ActorType;
+  actorLabel: string;
+  occurredAt: string;
+}
+
+/** Adjacent version of the SAME creative, keyed by versionNo. */
+export interface SiblingVersion {
+  id: string;
+  versionNo: number;
+}
+
+/** GET /api/c/versions/:id — full version detail for the client lightbox. */
+export interface ClientVersionDetail {
+  id: string;
+  creativeId: string;
+  creativeTitle: string;
+  versionNo: number;
+  state: VersionState;
+  reviewStatus: ReviewStatus;
+  textBody: string | null;
+  failReason: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  asset: { sha256: string; mime: string; byteSize: number; storageKey: string } | null;
+  poster: { sha256: string; mime: string; byteSize: number; storageKey: string } | null;
+  posterUrl: string | null;
+  comments: Comment[];
+  commentsCount: number;
+  reviewEvent: ReviewEvent | null;
+  siblingVersions: {
+    previous: SiblingVersion | null;
+    next: SiblingVersion | null;
+  };
+}
