@@ -645,3 +645,88 @@ h1, h2, h3 {
 }
 .drawing-panel-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .drawing-toolbar { display: flex; align-items: center; gap: 8px; }
+
+/* ==================================================================
+   CLIENT PORTAL — NUEVO DISEÑO (dashboard)
+   Toque visual aplicando el look & feel del diseño nuevo.
+   ================================================================== */
+.client-shell { background: var(--paper); min-height: 100vh; }
+.client-topbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 40px; border-bottom: 1px solid var(--paper-line); background: var(--paper-2); }
+.client-topbar .brand { font-family: var(--display); font-size: 16px; }
+.client-topbar .who { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.client-body { padding: 34px 40px; }
+.client-body h2 { margin-bottom: 4px; }
+
+.review-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 16px 0 36px; }
+.review-card { background: var(--paper-2); border: 1px solid var(--paper-line); border-radius: 6px; overflow: hidden; }
+.review-card .thumb { aspect-ratio: 16 / 10; background: repeating-linear-gradient(135deg, #dcd6c4, #dcd6c4 10px, #e4dfcf 10px, #e4dfcf 20px); display: flex; align-items: center; justify-content: center; }
+.review-card .thumb i { font-size: 26px; color: #b7af98; }
+.review-card .body { padding: 14px 16px; }
+.review-card .campaign { font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+.review-card .name { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
+.review-card .btn { width: 100%; justify-content: center; }
+
+.hist-row {
+  display: flex; justify-content: space-between; align-items: center; padding: 11px 0;
+  border-bottom: 1px solid var(--paper-line); font-size: 13px; width: 100%; background: none;
+  border-left: none; border-right: none; border-top: none; cursor: pointer; font-family: var(--sans);
+  color: var(--text); text-align: left;
+}
+.hist-row:hover { color: var(--accent-dark); }
+
+@media (max-width: 900px) {
+  .review-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 620px) {
+  .review-grid { grid-template-columns: 1fr; }
+  .client-body { padding: 22px 18px; }
+  .client-topbar { padding: 14px 18px; flex-wrap: wrap; }
+}
+
+/* ==================================================================
+   CLIENT LIGHTBOX — NUEVO TEMA OSCURO (diseño nuevo)
+   REVERSIBLE: para volver al tema claro actual, eliminar este bloque
+   (el bloque anterior deja el lightbox light paper).
+   ================================================================== */
+.lightbox { background: var(--ink); color: var(--ink-text); }
+.lb-top { border-bottom: 1px solid var(--ink-line); }
+.lb-top .meta { color: var(--ink-text-dim); }
+.lb-close { color: var(--ink-text-dim); }
+.lb-close:hover { color: var(--ink-text); }
+.lb-versions { border-right: 1px solid var(--ink-line); }
+.lb-versions .vdot { background: var(--ink-2); border: 1px solid var(--ink-line); color: var(--ink-text-dim); }
+.lb-versions .vdot:hover { border-color: var(--accent); color: var(--accent); }
+.lb-versions .vdot.active, .lb-versions .vdot.current { border-color: var(--accent); color: var(--accent); background: transparent; }
+.lb-text-content { background: #2b2c30; }
+.lb-text-content p { color: var(--ink-text); }
+.lb-canvas { background: #2b2c30; border: 1px solid #3a3b3e; box-shadow: 0 0 0 1px rgba(232, 130, 60, 0.15), 0 0 40px rgba(232, 130, 60, 0.06); }
+.lb-canvas i.placeholder { color: #54524a; }
+.canvas-hint { color: var(--ink-text-dim); }
+.pin { background: rgba(232, 130, 60, 0.15); border: 1.5px solid var(--accent); color: var(--accent); }
+.pin.pin-draft { background: rgba(232, 130, 60, 0.35); }
+.pin.active { background: rgba(232, 130, 60, 0.55); box-shadow: 0 0 0 4px rgba(232, 130, 60, 0.2); }
+.pin-popover { background: var(--ink-2); border: 1px solid var(--ink-line); }
+.pin-popover input, .pin-popover textarea { background: var(--ink); border: 1px solid var(--ink-line); color: var(--ink-text); }
+.lb-comments { border-left: 1px solid var(--ink-line); }
+.lb-comment { border-bottom: 1px solid var(--ink-line); }
+.lb-comment .who { color: var(--ink-text); }
+.lb-comment .pinref { color: var(--accent); }
+.lb-comment .txt { color: var(--ink-text-dim); }
+.lb-comment.active { background: rgba(232, 130, 60, 0.08); }
+.lb-input { border-top: 1px solid var(--ink-line); }
+.lb-input input, .lb-input textarea { background: var(--ink-2); border: 1px solid var(--ink-line); color: var(--ink-text); }
+.lb-decide { border-top: 1px solid var(--ink-line); }
+.lb-decide .btn.outline { background: transparent; border: 1px solid var(--amber); color: var(--amber); }
+.decide-confirm span { color: var(--ink-text-dim); }
+.lb-decision-banner { color: var(--ink-text-dim); background: var(--ink-2); border-color: var(--ink-line); }
+.locked-banner { color: var(--amber); background: rgba(184, 121, 28, 0.12); border-color: rgba(184, 121, 28, 0.3); }
+.kbd-hint { background: var(--ink-2); border: 1px solid var(--ink-line); color: var(--ink-text-dim); }
+.scrubber-track { background: var(--ink-2); border-color: var(--ink-line); }
+.scrubber-segment { background: rgba(232, 130, 60, 0.35); border: 1px solid var(--accent); }
+.scrubber-segment.active { background: rgba(232, 130, 60, 0.6); }
+.scrubber-segment-num { color: var(--ink-text); }
+.scrubber-times { color: var(--ink-text-dim); }
+.scrubber-popover-range { color: var(--accent); }
+.canvas-mode-toggle .chip { background: var(--ink-2); border-color: var(--ink-line); color: var(--ink-text-dim); }
+.canvas-mode-toggle .chip.active { background: rgba(232, 130, 60, 0.14); border-color: var(--accent); color: var(--accent); }
+.lightbox .skeleton-row { background: linear-gradient(90deg, var(--ink-2) 25%, #2b2c30 37%, var(--ink-2) 63%); }
