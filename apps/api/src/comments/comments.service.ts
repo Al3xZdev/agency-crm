@@ -27,7 +27,7 @@ export class CommentsService {
 
     let authorLabel: string;
     if (principal.kind === 'STAFF') {
-      const user = await db.user.findUnique({
+      const user = await db.user.findFirst({
         where: { id: principal.userId! },
         select: { displayName: true },
       });
@@ -53,6 +53,7 @@ export class CommentsService {
         posY: dto.posY ?? null,
         startMs: dto.startMs ?? null,
         endMs: dto.endMs ?? null,
+        strokes: dto.strokes ?? [],
         body: dto.body,
       },
     });
@@ -73,8 +74,8 @@ export class CommentsService {
     });
     if (!version) throw new NotFoundException();
 
-    return db.comment.findMany({
-      where: { versionId },
+    const comments = await db.comment.findMany({
+      where: { versionId, removedAt: null },
       select: {
         id: true,
         anchor: true,
@@ -82,6 +83,7 @@ export class CommentsService {
         posY: true,
         startMs: true,
         endMs: true,
+        strokes: true,
         body: true,
         authorType: true,
         authorLabel: true,
@@ -90,6 +92,9 @@ export class CommentsService {
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    // Normalize the nullable JSON column: empty array when no strokes.
+    return comments.map((comment) => ({ ...comment, strokes: comment.strokes ?? [] }));
   }
 
   /** Fire-and-forget COMMENT_NEW notification to the opposite party. */

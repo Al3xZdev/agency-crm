@@ -13,7 +13,7 @@ const STATUS_FILTERS: { value: CreativeStatus | 'ALL'; label: string }[] = [
   { value: 'IN_REVIEW', label: 'En revisión' },
   { value: 'CHANGES_REQUESTED', label: 'Cambios solicitados' },
   { value: 'APPROVED', label: 'Aprobados' },
-  { value: 'REJECTED', label: 'Rechazados' },
+  { value: 'REJECTED', label: 'No aprobados' },
   { value: 'UPLOAD_FAILED', label: 'Subida fallida' },
 ];
 
@@ -27,7 +27,7 @@ const KIND_FILTERS: { value: CreativeKind | 'ALL'; label: string }[] = [
 const STATUS_PILL: Record<CreativeStatus, { label: string; className: string }> = {
   APPROVED: { label: 'aprobado', className: 'pill approved' },
   DRAFT: { label: 'borrador', className: 'pill camp-archived' },
-  REJECTED: { label: 'rechazado', className: 'pill camp-paused' },
+  REJECTED: { label: 'No aprobado', className: 'pill camp-paused' },
   PROCESSING: { label: 'procesando', className: 'pill processing' },
   IN_REVIEW: { label: 'en revisión', className: 'pill processing' },
   CHANGES_REQUESTED: { label: 'cambios solicitados', className: 'pill processing' },

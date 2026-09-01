@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Delete, Get, Param } from '@nestjs/common';
 
 import { Roles } from '../auth/roles.decorator';
 import { VersionsService } from './versions.service';
@@ -17,5 +17,17 @@ export class VersionsController {
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   getDetail(@Param('versionId') versionId: string) {
     return this.versions.getDetail(versionId);
+  }
+
+  @Delete('versions/:versionId/comments/:commentId')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  removeComment(@Param('versionId') versionId: string, @Param('commentId') commentId: string) {
+    return this.versions.removeComment(versionId, commentId);
+  }
+
+  @Delete('versions/:versionId')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  remove(@Param('versionId') versionId: string) {
+    return this.versions.remove(versionId);
   }
 }

@@ -2,6 +2,7 @@
 
 import { MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react';
 
+import { formatMs } from '../../lib/format';
 import type { Comment } from '../../lib/types';
 
 interface RangeDraft {
@@ -24,9 +25,13 @@ export function VideoScrubber({
   onCreateRange: (startMs: number, endMs: number, body: string) => void;
   onSelectComment: (commentId: string) => void;
 }) {
-  // The repo returns a nullable durationMs; fall back to a padded placeholder
-  // so the track still renders and ranges stay bounds-clamped.
-  const totalMs = durationMs ?? 45000;
+  // Use the REAL video duration only. A null/0 duration means the metadata
+  // hasn't loaded yet — range creation is disabled until we know the true
+  // length, so a drag is never interpreted against a fabricated total. The
+  // track still renders (clamped to 0) while disabled.
+  const totalMs = durationMs && durationMs > 0 ? durationMs : 0;
+  const hasDuration = totalMs > 0;
+  const isDisabled = disabled || !hasDuration;
 
   const trackRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<number | null>(null);
@@ -45,7 +50,8 @@ export function VideoScrubber({
   }
 
   function handleMouseDown(e: ReactMouseEvent) {
-    if (disabled) return;
+    // Never start a range while disabled OR before the real duration is known.
+    if (disabled || totalMs <= 0) return;
     const ms = msFromClientX(e.clientX);
     anchorRef.current = ms;
     setDragging(true);
@@ -83,7 +89,8 @@ export function VideoScrubber({
   function submitDraft() {
     if (!draft || !draftText.trim()) return;
     // A plain click (no drag) yields a zero-width draft; give it a natural
-    // 500ms-wide point comment instead.
+    // 500ms-wide point comment instead. A real drag always keeps the actual
+    // endMs captured while dragging — never re-clamped here.
     const endMs =
       draft.endMs === draft.startMs ? clampMs(draft.startMs + 500) : draft.endMs;
     onCreateRange(draft.startMs, endMs, draftText.trim());
@@ -101,7 +108,7 @@ export function VideoScrubber({
     <div className="scrubber">
       <div
         ref={trackRef}
-        className={disabled ? 'scrubber-track disabled' : 'scrubber-track'}
+        className={isDisabled ? 'scrubber-track disabled' : 'scrubber-track'}
         onMouseDown={handleMouseDown}
       >
         {comments.map((comment, i) => {
@@ -172,16 +179,10 @@ export function VideoScrubber({
         </div>
       )}
 
-      {!disabled && !draft && (
+      {!isDisabled && !draft && (
         <p className="canvas-hint">Arrastrá sobre la línea de tiempo para comentar un tramo del video.</p>
       )}
     </div>
   );
 }
 
-function formatMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}

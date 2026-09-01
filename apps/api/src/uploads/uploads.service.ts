@@ -120,8 +120,8 @@ export class UploadsService {
         },
         select: { id: true, versionNo: true, state: true },
       });
-      await tx.creative.update({
-        where: { id: creative.id },
+      await tx.creative.updateMany({
+        where: { id: creative.id, agencyId: principal.agencyId },
         data: { status: rollupStatus({ state: 'READY', reviewStatus: 'NONE' }) },
       });
       return version;
@@ -201,14 +201,14 @@ export class UploadsService {
 
         // Content-addressed dedup: same bytes â‡’ one Asset row, refcount++.
         let assetId: string;
-        const existingAsset = await tx.asset.findUnique({
+        const existingAsset = await tx.asset.findFirst({
           where: { sha256: input.sha256 },
           select: { id: true },
         });
         if (existingAsset) {
           assetId = existingAsset.id;
-          await tx.asset.update({
-            where: { id: existingAsset.id },
+          await tx.asset.updateMany({
+            where: { id: existingAsset.id, agencyId: principal.agencyId },
             data: { refCount: { increment: 1 } },
           });
         } else {
@@ -240,8 +240,8 @@ export class UploadsService {
         });
 
         // Rollup lives in the SAME tx (spec Cap 4 precise rule).
-        await tx.creative.update({
-          where: { id: input.creative.id },
+        await tx.creative.updateMany({
+          where: { id: input.creative.id, agencyId: principal.agencyId },
           data: { status: rollupStatus({ state: 'PROCESSING', reviewStatus: 'NONE' }) },
         });
 

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { ToastProvider } from '../lib/toast';
+
 /**
  * React Query provider for the staff + client surfaces. Config merges the
  * app's original options (no refetch on window focus) with the reference
@@ -22,5 +24,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>{children}</ToastProvider>
+    </QueryClientProvider>
+  );
 }

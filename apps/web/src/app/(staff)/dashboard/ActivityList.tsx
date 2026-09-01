@@ -4,13 +4,15 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '../../../lib/api';
+import { formatRelativeTime } from '../../../lib/format';
 import { ActivityItem } from '../../../lib/types';
 
 /**
  * Recent-activity feed (PR5), cursor-paginated. Data: GET /api/dashboard/activity?cursor=&limit=.
  *
  * Backend adaptation: each row is a creative VERSION (id = creativeVersion id,
- * status = the version state PROCESSING/READY/FAILED) — not a creative. The
+ * creativeId = owning creative id, status = the version state
+ * PROCESSING/READY/FAILED) — not a creative. The
  * endpoint exposes no status query param, so the state chips below filter the
  * already-loaded rows client-side; pagination stays faithful to the cursor.
  */
@@ -106,8 +108,8 @@ export function ActivityList() {
                 className="list-row list-row-clickable"
                 role="button"
                 tabIndex={0}
-                onClick={() => router.push(`/versions/${item.id}`)}
-                onKeyDown={(e) => e.key === 'Enter' && router.push(`/versions/${item.id}`)}
+                onClick={() => router.push(`/creatives/${item.creativeId}`)}
+                onKeyDown={(e) => e.key === 'Enter' && router.push(`/creatives/${item.creativeId}`)}
               >
                 <div>{item.creativeName}</div>
                 <div className="muted">{item.clientName}</div>
@@ -115,7 +117,7 @@ export function ActivityList() {
                 <div>
                   <span className={pill.className}>{pill.label}</span>
                 </div>
-                <div className="mono">{relativeTime(item.updatedAt)}</div>
+                <div className="mono">{formatRelativeTime(item.updatedAt)}</div>
               </div>
             );
           })}
@@ -134,15 +136,4 @@ export function ActivityList() {
       )}
     </div>
   );
-}
-
-function relativeTime(isoDate: string): string {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return 'ahora';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
 }

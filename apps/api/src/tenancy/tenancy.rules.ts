@@ -7,6 +7,15 @@ import type { Principal } from './request-context.als';
  * unit-testable without a database. The `$extends` factory in
  * tenancy.extension.ts applies these rules to real queries; container-based
  * matrix runs stay pending until a Docker-capable host exists.
+ *
+ * Unique-selector operations (`findUnique`, `findUniqueOrThrow`, `update`,
+ * `delete`, `upsert`) are REJECTED through the scoped layer: injected scope
+ * is expressed as a `{ AND: [scope, ...] }` filter, which Prisma 6.19 only
+ * accepts on filter-based operations. Unique-selector ops demand a bare
+ * unique selector and are not safely reroutable inside `$allOperations`
+ * while preserving transaction semantics, so they fail closed. Callers must
+ * use `findFirst`/`findFirstOrThrow`/`updateMany`/`deleteMany` with explicit
+ * where filters instead.
  */
 
 export type ModelName = string;
@@ -134,11 +143,12 @@ export function findNestedRelationWrite(value: unknown, path = ''): string | nul
 }
 
 const READ_OPS = new Set([
-  'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
+  'findFirst', 'findFirstOrThrow',
   'findMany', 'count', 'aggregate', 'groupBy',
 ]);
-const FILTERED_WRITE_OPS = new Set(['update', 'updateMany', 'delete', 'deleteMany']);
+const FILTERED_WRITE_OPS = new Set(['updateMany', 'deleteMany']);
 const CREATE_OPS = new Set(['create', 'createMany', 'createManyAndReturn']);
+const UNIQUE_SELECTOR_OPS = new Set(['findUnique', 'findUniqueOrThrow', 'update', 'delete', 'upsert']);
 const UNSATISFIABLE_WHERE = { id: '__tenancy_denied__' } as const;
 
 function asDataRecords(value: unknown): Record<string, unknown>[] {
@@ -158,6 +168,11 @@ export function applyOperation(
 ): void {
   if (!model || !isTenanted(model)) {
     throw new TenancyViolation(`operation ${operation} on non-tenanted target ${model ?? '(none)'}`);
+  }
+  if (UNIQUE_SELECTOR_OPS.has(operation)) {
+    throw new TenancyViolation(
+      `${operation} on ${model} is unsupported through the scoped layer: injected scope cannot be expressed as a unique selector. Use findFirst/findFirstOrThrow/updateMany/deleteMany with explicit where filters instead`,
+    );
   }
   if (READ_OPS.has(operation)) {
     const where = injectedWhere(model, principal, args.where as Record<string, unknown> | undefined);

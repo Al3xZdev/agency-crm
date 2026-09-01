@@ -8,6 +8,8 @@ import { CampaignDetail } from '../../../../lib/types';
 import { StatusPill } from '../../../../components/staff/StatusPill';
 import { CampaignStatusPill } from '../../../../components/staff/CampaignStatusPill';
 import { CreateCreativeModal } from '../../../../components/staff/CreateCreativeModal';
+import { ConfirmModal } from '../../../../components/staff/ConfirmModal';
+import { useToast } from '../../../../lib/toast';
 
 const TYPE_ICON = { IMAGE: 'photo', VIDEO: 'video', TEXT: 'align-left' } as const;
 
@@ -27,8 +29,10 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
   const [showCreateCreative, setShowCreateCreative] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const { data: campaign, isLoading, isError, refetch } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -49,6 +53,26 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
     },
   });
 
+  const deleteCampaign = useMutation({
+    mutationFn: () => apiFetch<{ ok: true }>(`/api/campaigns/${campaignId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      showToast('Campaña eliminada');
+      router.push('/campaigns');
+    },
+    onError: (err) => {
+      setStatusError(err instanceof ApiError ? err.message : 'No pudimos eliminar la campaña.');
+    },
+  });
+
+  function handleBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/campaigns');
+    }
+  }
+
   if (isError) {
     return (
       <div className="error-banner">
@@ -64,12 +88,18 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
 
   return (
     <div>
-      <div className="breadcrumb">
-        <button className="link-btn" onClick={() => router.push(`/clients/${campaign.clientId}`)}>
-          {campaign.clientName}
+      <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button className="link-btn" onClick={handleBack}>
+          <i className="ti ti-arrow-left" aria-hidden="true" />
+          Volver
         </button>
-        {' / '}
-        {campaign.name}
+        <span>
+          <button className="link-btn" onClick={() => router.push(`/clients/${campaign.clientId}`)}>
+            {campaign.clientName}
+          </button>
+          {' / '}
+          {campaign.name}
+        </span>
       </div>
 
       <div className="client-header">
@@ -79,27 +109,33 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
             <div className="eyebrow">{campaign.creatives.length} creativos</div>
           </div>
         </div>
-        <div className="status-menu-wrap">
-          <button className="btn" onClick={() => setStatusMenuOpen((s) => !s)}>
-            <CampaignStatusPill status={campaign.status} />
-            <i className="ti ti-chevron-down" aria-hidden="true" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div className="status-menu-wrap">
+            <button className="btn" onClick={() => setStatusMenuOpen((s) => !s)}>
+              <CampaignStatusPill status={campaign.status} />
+              <i className="ti ti-chevron-down" aria-hidden="true" />
+            </button>
+            {statusMenuOpen && (
+              <>
+                <div className="status-menu-backdrop" onClick={() => setStatusMenuOpen(false)} />
+                <div className="status-menu">
+                  {STATUS_OPTIONS.filter((o) => o.value !== campaign.status).map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => updateStatus.mutate(option.value)}
+                      disabled={updateStatus.isPending}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <button className="btn red" onClick={() => setConfirmingDelete(true)} disabled={deleteCampaign.isPending}>
+            <i className="ti ti-trash" aria-hidden="true" />
+            Eliminar campaña
           </button>
-          {statusMenuOpen && (
-            <>
-              <div className="status-menu-backdrop" onClick={() => setStatusMenuOpen(false)} />
-              <div className="status-menu">
-                {STATUS_OPTIONS.filter((o) => o.value !== campaign.status).map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => updateStatus.mutate(option.value)}
-                    disabled={updateStatus.isPending}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -155,6 +191,17 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
           onCreated={(creative) => router.push(`/upload/${creative.id}`)}
         />
       )}
+
+      <ConfirmModal
+        open={confirmingDelete}
+        title="Eliminar campaña"
+        message="¿Eliminar esta campaña con todos sus creativos y versiones?"
+        confirmLabel="Eliminar"
+        confirmIcon="ti ti-trash"
+        busy={deleteCampaign.isPending}
+        onConfirm={() => deleteCampaign.mutate()}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }

@@ -120,11 +120,14 @@ export class ClientsService {
     const db = this.tenancy.scoped();
     const row = await db.client.findFirst({ where: { id }, select: { id: true } });
     if (!row) throw new NotFoundException();
-    return db.client.update({
+    const result = await db.client.updateMany({ where: { id }, data });
+    if (result.count === 0) throw new NotFoundException();
+    const updated = await db.client.findFirst({
       where: { id },
-      data,
       select: { id: true, name: true, email: true, contact: true },
     });
+    if (!updated) throw new NotFoundException();
+    return updated;
   }
 
   /** Deleting a client with any content is blocked (409), mirroring campaigns. */
@@ -138,7 +141,8 @@ export class ClientsService {
       return campaignCount + creativeCount > 0;
     });
     if (blocked) throw new ConflictException('CLIENT_HAS_CONTENT');
-    await db.client.delete({ where: { id } });
+    const deleted = await db.client.deleteMany({ where: { id } });
+    if (deleted.count === 0) throw new NotFoundException();
     return { ok: true };
   }
 }

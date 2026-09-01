@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { EmailTemplate } from '@prisma/client';
 import { SealService } from '../crypto/seal.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -297,12 +297,12 @@ export class NotificationsService {
   async markHandled(emailId: string): Promise<{ id: string; handledAt: Date }> {
     const db = this.tenancy.scoped();
     const now = new Date();
-    const result = await db.emailMessage.update({
+    const result = await db.emailMessage.updateMany({
       where: { id: emailId },
       data: { handledAt: now },
-      select: { id: true },
     });
-    return { id: result.id, handledAt: now };
+    if (result.count === 0) throw new NotFoundException();
+    return { id: emailId, handledAt: now };
   }
 
   // ---------------------------------------------------------------------------

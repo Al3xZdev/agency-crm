@@ -36,6 +36,15 @@ function signCsrf(secret: string): string {
   return `${nonce}.${createHmac('sha256', secret).update(nonce).digest('base64url')}`;
 }
 
+function matchClause(row: Record<string, unknown>, key: string, cond: unknown): boolean {
+  const cell = row[key];
+  if (cell === cond) return true;
+  if (typeof cond !== 'object' || cond === null) return false;
+  const v = cond as Record<string, unknown>;
+  if ('in' in v) return Array.isArray(v.in) && (v.in as unknown[]).includes(cell);
+  return false;
+}
+
 function matchesWhere(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
   for (const [k, v] of Object.entries(where)) {
     if (k === 'AND') {
@@ -43,7 +52,12 @@ function matchesWhere(row: Record<string, unknown>, where: Record<string, unknow
       if (!clauses.every((sub) => matchesWhere(row, sub))) return false;
       continue;
     }
-    if (row[k] !== v) return false;
+    if (k === 'OR') {
+      const clauses = v as Array<Record<string, unknown>>;
+      if (!clauses.some((sub) => matchesWhere(row, sub))) return false;
+      continue;
+    }
+    if (!matchClause(row, k, v)) return false;
   }
   return true;
 }
@@ -67,6 +81,7 @@ function buildTenantedView(raw: MockDbBase): MockDbBase {
     }) as never;
   }
   view.$transaction = async (fn: (tx: MockDbBase) => Promise<unknown>) => fn(view);
+  view.$executeRawUnsafe = async () => ({ count: 0 });
   (view as unknown as Record<string, unknown>).$extends = () => view;
   return view;
 }
@@ -117,6 +132,26 @@ function buildMockDb() {
         }
         map.delete(row.id as string);
         return row;
+      },
+      updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        let count = 0;
+        for (const row of [...map.values()]) {
+          if (!matchesWhere(row, where)) continue;
+          for (const [k, v] of Object.entries(data)) {
+            if (v && typeof v === 'object' && 'decrement' in v) {
+              row[k] = (row[k] as number) - (v as { decrement: number }).decrement;
+            } else {
+              row[k] = v;
+            }
+          }
+          count++;
+        }
+        return { count };
+      },
+      deleteMany: ({ where }: { where: Record<string, unknown> }) => {
+        const targets = [...map.keys()].filter((id) => matchesWhere(map.get(id)!, where));
+        for (const id of targets) map.delete(id);
+        return { count: targets.length };
       },
       count: ({ where }: { where?: Record<string, unknown> }) =>
         [...map.values()].filter((r) => !where || matchesWhere(r, where)).length,
@@ -174,8 +209,9 @@ function buildMockDb() {
       findFirst: () => null,
       create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cv_stub', createdAt: new Date(), ...data }),
       update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'cv_stub', ...data }),
+      deleteMany: () => ({ count: 0 }),
     },
-    asset: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }) },
+    asset: { findUnique: () => null, create: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }), update: ({ data }: { data: Record<string, unknown> }) => ({ id: 'as_stub', ...data }), updateMany: ({ data }: { data: Record<string, unknown> }) => ({ count: 0 }), deleteMany: () => ({ count: 0 }) },
     user: {
       findUnique: () => null,
       findMany: () => [],
@@ -360,7 +396,7 @@ describe('hierarchy CRUD (slice 5a)', () => {
     expect(names).not.toContain('Contraband');
   });
 
-  it('deleting a campaign that still has creatives is blocked with 409', async () => {
+  it('deleting a campaign cascade-deletes its creatives', async () => {
     const auth = staffAuth('SUPER_ADMIN');
     db._seedCampaign('cmp_full', 'client_1');
     db.creative.create({
@@ -380,10 +416,10 @@ describe('hierarchy CRUD (slice 5a)', () => {
       .delete('/campaigns/cmp_full')
       .set('Cookie', auth.cookie)
       .set(auth.headers);
-    expect(res.status).toBe(409);
-    expect(JSON.stringify(res.body)).toContain('CAMPAIGN_NOT_EMPTY');
-    expect(db._campaigns.has('cmp_full')).toBe(true); // nothing deleted
-    expect(db._creatives.has('cr_1')).toBe(true);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(db._campaigns.has('cmp_full')).toBe(false);
+    expect(db._creatives.has('cr_1')).toBe(false);
   });
 
   it('deleting an empty campaign succeeds', async () => {

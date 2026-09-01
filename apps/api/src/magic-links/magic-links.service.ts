@@ -145,6 +145,28 @@ export class MagicLinksService {
   }
 
   /**
+   * One-transaction hard delete: remove the link row (history cleanup) AND any
+   * sessions tied to it. Unlike `revoke` this permanently drops history. The
+   * row is only ever scoped to the actor's agency; a foreign/unknown link is
+   * indistinguishable (generic NotFound).
+   */
+  async remove(actor: Principal, linkId: string): Promise<{ ok: true }> {
+    const scoped = this.tenancy.scoped();
+    const deleted = await scoped.$transaction(async (tx) => {
+      await tx.session.deleteMany({
+        where: { magicLinkId: linkId, agencyId: actor.agencyId },
+      });
+      const link = await tx.magicLink.deleteMany({
+        where: { id: linkId, agencyId: actor.agencyId },
+      });
+      return link.count;
+    });
+    if (deleted === 0) throw new NotFoundException();
+    this.logger.log(`deleted link ${linkId}`);
+    return { ok: true };
+  }
+
+  /**
    * Public redemption. Every failure mode returns `undefined` so the route
    * answers with ONE identical generic response and sets NO cookies.
    */

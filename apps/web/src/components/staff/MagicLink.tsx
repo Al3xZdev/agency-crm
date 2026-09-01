@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '../../lib/api';
+import { formatDate } from '../../lib/format';
 import { MagicLinkListItem } from '../../lib/types';
+import { ConfirmModal } from './ConfirmModal';
 
 type LinkStatus = 'ACTIVE_UNUSED' | 'ACTIVE_USED' | 'EXPIRED' | 'REVOKED';
 
@@ -33,6 +35,7 @@ function getStatus(link: MagicLinkListItem): LinkStatus {
  */
 export function MagicLink({ link }: { link: MagicLinkListItem }) {
   const [confirming, setConfirming] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -48,12 +51,27 @@ export function MagicLink({ link }: { link: MagicLinkListItem }) {
     },
   });
 
+  // Hard delete (history cleanup) — independent of revoke and available for
+  // every status, including REVOKED.
+  const deleteLink = useMutation({
+    mutationFn: () => apiFetch<{ ok: true }>(`/api/magic-links/${link.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['magic-links'] });
+      setConfirmDelete(false);
+      setError(null);
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'No pudimos eliminar el link.');
+    },
+  });
+
   const status = getStatus(link);
   const statusInfo = STATUS_LABEL[status];
 
   return (
-    <div className="list-row link-row">
-      <div>{link.clientName}</div>
+    <>
+      <div className="list-row link-row">
+        <div>{link.clientName}</div>
       <div className="mono muted">{formatDate(link.createdAt)}</div>
       <div className="mono muted">{link.lastUsedAt ? formatDate(link.lastUsedAt) : '—'}</div>
       <div>
@@ -82,12 +100,27 @@ export function MagicLink({ link }: { link: MagicLinkListItem }) {
             )}
           </>
         )}
+        <button
+          className="btn ghost icon-btn"
+          title="Eliminar link"
+          onClick={() => setConfirmDelete(true)}
+        >
+          <i className="ti ti-trash" aria-hidden="true" />
+        </button>
       </div>
       {error && <div className="field-error" style={{ gridColumn: '1 / -1' }}>{error}</div>}
-    </div>
-  );
-}
+      </div>
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+      <ConfirmModal
+        open={confirmDelete}
+        title="Eliminar link mágico"
+        message="¿Eliminar este link de forma permanente? Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        confirmIcon="ti ti-trash"
+        busy={deleteLink.isPending}
+        onConfirm={() => deleteLink.mutate()}
+        onCancel={() => setConfirmDelete(false)}
+      />
+    </>
+  );
 }

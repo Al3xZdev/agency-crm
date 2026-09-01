@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '../../lib/api';
+import { useToast } from '../../lib/toast';
 import { CreativeKind, CreativeStatus } from '../../lib/types';
 
 const TYPE_OPTIONS: { value: CreativeKind; label: string; icon: string }[] = [
@@ -29,6 +30,7 @@ export function CreateCreativeModal({
   const [kind, setKind] = useState<CreativeKind>('IMAGE');
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -39,6 +41,7 @@ export function CreateCreativeModal({
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] });
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      showToast(`Creativo "${title.trim()}" creado — subí su primera versión`);
       onCreated({ id: created.id, title: title.trim(), kind: created.kind });
     },
     onError: (err) => {

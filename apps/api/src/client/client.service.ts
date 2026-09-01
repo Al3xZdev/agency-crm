@@ -31,7 +31,7 @@ export class ClientService {
         campaignId: true,
         createdAt: true,
         versions: {
-          where: { state: 'READY' },
+          where: { state: 'READY', removedAt: null },
           orderBy: { versionNo: 'desc' },
           take: 1,
           select: {
@@ -68,7 +68,7 @@ export class ClientService {
   async getVersionDetail(versionId: string, clientId: string) {
     const db = this.tenancy.scoped();
     const version = await db.creativeVersion.findFirst({
-      where: { id: versionId },
+      where: { id: versionId, removedAt: null },
       select: {
         id: true,
         clientId: true,
@@ -87,6 +87,7 @@ export class ClientService {
           select: { sha256: true, mime: true, byteSize: true, storageKey: true },
         },
         comments: {
+          where: { removedAt: null },
           select: {
             id: true,
             anchor: true,
@@ -94,6 +95,7 @@ export class ClientService {
             posY: true,
             startMs: true,
             endMs: true,
+            strokes: true,
             body: true,
             authorType: true,
             authorLabel: true,
@@ -122,11 +124,18 @@ export class ClientService {
 
     const { reviewEvents, comments, creative, ...rest } = version;
 
+    // Asset byteSize is a BigInt column; JSON cannot serialize it raw, so
+    // map it to a string before exposing it through the API.
+    const toAssetView = (
+      a: typeof rest.asset | null,
+    ): { sha256: string; mime: string; byteSize: string; storageKey: string } | null =>
+      a ? { ...a, byteSize: a.byteSize.toString() } : null;
+
     // Sibling versions of the SAME creative, ordered by versionNo asc. The
     // current version is excluded; previous = the one immediately before it,
     // next = immediately after. If only one version exists, both are null.
     const siblings = await db.creativeVersion.findMany({
-      where: { creativeId: rest.creativeId, id: { not: rest.id } },
+      where: { creativeId: rest.creativeId, id: { not: rest.id }, removedAt: null },
       select: { id: true, versionNo: true },
       orderBy: { versionNo: 'asc' },
     });
@@ -141,9 +150,12 @@ export class ClientService {
 
     return {
       ...rest,
+      asset: toAssetView(rest.asset),
+      poster: toAssetView(rest.poster),
       creativeTitle: creative?.title ?? 'Untitled',
       posterUrl: rest.poster?.storageKey ?? rest.asset?.storageKey ?? null,
-      comments,
+      // Normalize the nullable JSON column: empty array when no strokes.
+      comments: comments.map((comment) => ({ ...comment, strokes: comment.strokes ?? [] })),
       commentsCount: comments.length,
       reviewEvent: reviewEvents[0] ?? null,
       siblingVersions: { previous, next },

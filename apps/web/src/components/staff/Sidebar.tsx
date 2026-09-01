@@ -10,10 +10,10 @@ import type { StaffUser } from '../../lib/types';
 const NAV_ITEMS: { href: string; label: string; icon: string; roles?: StaffUser['role'][] }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
   { href: '/clients', label: 'Clientes', icon: 'ti ti-users' },
-  { href: '/campaigns', label: 'Campañas', icon: 'ti ti-bullhorn' },
+  { href: '/campaigns', label: 'Campañas', icon: 'ti ti-briefcase' },
   { href: '/creatives', label: 'Creativos', icon: 'ti ti-photo' },
   // GET /api/magic-links is SUPER_ADMIN/ACCOUNT_MANAGER only — hide the link otherwise.
-  { href: '/magic-links', label: 'Magic Links', icon: 'ti ti-link', roles: ['SUPER_ADMIN', 'ACCOUNT_MANAGER'] },
+  { href: '/magic-links', label: 'Links mágicos', icon: 'ti ti-link', roles: ['SUPER_ADMIN', 'ACCOUNT_MANAGER'] },
   { href: '/settings', label: 'Ajustes', icon: 'ti ti-settings' },
 ];
 

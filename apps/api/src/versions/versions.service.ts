@@ -15,7 +15,7 @@ export class VersionsService {
     if (!creative) throw new NotFoundException();
 
     const versions = await db.creativeVersion.findMany({
-      where: { creativeId },
+      where: { creativeId, removedAt: null },
       select: {
         id: true,
         versionNo: true,
@@ -24,7 +24,7 @@ export class VersionsService {
         textBody: true,
         createdAt: true,
         poster: { select: { storageKey: true } },
-        asset: { select: { storageKey: true } },
+        asset: { select: { storageKey: true, mime: true } },
       },
       orderBy: { versionNo: 'desc' },
     });
@@ -37,13 +37,14 @@ export class VersionsService {
       textBody: v.textBody,
       createdAt: v.createdAt,
       posterUrl: v.poster?.storageKey ?? v.asset?.storageKey ?? null,
+      videoUrl: v.asset && v.asset.mime.startsWith('video') ? v.asset.storageKey : null,
     }));
   }
 
   async getDetail(versionId: string) {
     const db = this.tenancy.scoped();
     const version = await db.creativeVersion.findFirst({
-      where: { id: versionId },
+      where: { id: versionId, removedAt: null },
       select: {
         id: true,
         creativeId: true,
@@ -60,7 +61,7 @@ export class VersionsService {
         poster: {
           select: { sha256: true, mime: true, byteSize: true, storageKey: true },
         },
-        _count: { select: { comments: true } },
+        _count: { select: { comments: { where: { removedAt: null } } } },
         reviewEvents: {
           take: 1,
           select: {
@@ -78,9 +79,48 @@ export class VersionsService {
     const { reviewEvents, _count, ...rest } = version;
     return {
       ...rest,
+      // Asset byteSize is a BigInt column; JSON cannot serialize it raw, so
+      // map it to a string before exposing it through the API.
+      asset: rest.asset ? { ...rest.asset, byteSize: rest.asset.byteSize.toString() } : null,
+      poster: rest.poster ? { ...rest.poster, byteSize: rest.poster.byteSize.toString() } : null,
       posterUrl: rest.poster?.storageKey ?? rest.asset?.storageKey ?? null,
       commentsCount: _count.comments,
       reviewEvent: reviewEvents[0] ?? null,
     };
+  }
+
+  /**
+   * Staff-only comment removal (cleanup capability). Soft-deletes the comment
+   * to respect the append-only audit invariant (DB triggers forbid physical
+   * DELETE/UPDATE on Comment rows).
+   */
+  async removeComment(versionId: string, commentId: string): Promise<{ ok: true }> {
+    const db = this.tenancy.scoped();
+    const updated = await db.comment.updateMany({
+      where: { id: commentId, versionId },
+      data: { removedAt: new Date() },
+    });
+    if (updated.count === 0) throw new NotFoundException();
+    return { ok: true };
+  }
+
+  /**
+   * Staff-only version removal: soft-deletes the version by setting removedAt.
+   * Child Comment and ReviewEvent rows are never touched — the append-only
+   * audit invariant (DB triggers) is preserved. Media assets are
+   * content-addressed and shared, so they are intentionally NOT removed here.
+   */
+  async remove(versionId: string): Promise<{ ok: true }> {
+    const db = this.tenancy.scoped();
+    const version = await db.creativeVersion.findFirst({
+      where: { id: versionId },
+      select: { id: true },
+    });
+    if (!version) throw new NotFoundException();
+    await db.creativeVersion.updateMany({
+      where: { id: versionId },
+      data: { removedAt: new Date() },
+    });
+    return { ok: true };
   }
 }

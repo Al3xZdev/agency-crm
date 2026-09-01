@@ -53,11 +53,11 @@ export class ReviewsService {
 
         const reviewStatus = DECISION_TO_REVIEW_STATUS[dto.decision];
 
-        await tx.creativeVersion.update({
+        const versionUpdated = await tx.creativeVersion.updateMany({
           where: { id: versionId },
           data: { reviewStatus: reviewStatus as never },
         });
-
+        if (versionUpdated.count === 0) throw new NotFoundException();
         const latest = await tx.creativeVersion.findFirst({
           where: { creativeId: version.creativeId },
           orderBy: { versionNo: 'desc' },
@@ -65,10 +65,11 @@ export class ReviewsService {
         });
 
         const newStatus = rollupStatus(latest);
-        await tx.creative.update({
+        const creativeUpdated = await tx.creative.updateMany({
           where: { id: version.creativeId },
           data: { status: newStatus },
         });
+        if (creativeUpdated.count === 0) throw new NotFoundException();
 
         return event;
       });

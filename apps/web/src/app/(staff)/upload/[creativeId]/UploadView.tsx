@@ -36,6 +36,14 @@ export function UploadView({ creativeId }: { creativeId: string }) {
 
   const isText = creative?.kind === 'TEXT';
 
+  function handleBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(`/creatives/${creativeId}`);
+    }
+  }
+
   function handleFiles(files: FileList | null) {
     const selected = files?.[0];
     if (!selected) return;
@@ -117,7 +125,13 @@ export function UploadView({ creativeId }: { creativeId: string }) {
 
   return (
     <div>
-      <div className="breadcrumb">{creative ? `${creative.title} / nueva versión` : 'Nueva versión'}</div>
+      <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button className="link-btn" onClick={handleBack}>
+          <i className="ti ti-arrow-left" aria-hidden="true" />
+          Volver
+        </button>
+        <span>{creative ? `${creative.title} / nueva versión` : 'Nueva versión'}</span>
+      </div>
 
       <div className="upload-wrap">
         <form onSubmit={handleSubmit}>

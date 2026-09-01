@@ -10,7 +10,7 @@ const CONFIG: Record<CreativeStatus, { label: string; className: string; icon: s
   PROCESSING: { label: 'procesando', className: 'pill processing', icon: 'loader-2' },
   IN_REVIEW: { label: 'en revisión', className: 'pill pending', icon: 'clock' },
   APPROVED: { label: 'aprobado', className: 'pill approved', icon: 'check' },
-  REJECTED: { label: 'rechazado', className: 'pill rejected', icon: 'x' },
+  REJECTED: { label: 'No aprobado', className: 'pill rejected', icon: 'x' },
   CHANGES_REQUESTED: { label: 'cambios solicitados', className: 'pill pending', icon: 'repeat' },
   UPLOAD_FAILED: { label: 'subida fallida', className: 'pill rejected', icon: 'alert-triangle' },
 };

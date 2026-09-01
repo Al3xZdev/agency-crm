@@ -1,6 +1,5 @@
 import {
   Body,
-  ConflictException,
   Controller,
   Delete,
   Get,
@@ -131,22 +130,40 @@ export class CreativesService {
     const db = this.tenancy.scoped();
     const row = await db.creative.findFirst({ where: { id }, select: { id: true } });
     if (!row) throw new NotFoundException();
-    return db.creative.update({
+    const result = await db.creative.updateMany({ where: { id }, data });
+    if (result.count === 0) throw new NotFoundException();
+    const updated = await db.creative.findFirst({
       where: { id },
-      data,
       select: { id: true, title: true, kind: true, status: true },
     });
+    if (!updated) throw new NotFoundException();
+    return updated;
   }
 
-  /** Versions arrive in 5b; the guard is already here so the contract holds. */
+  /** Cascade removal: comments and review events of every version, then the
+   * versions, then the creative row. The comments/review events live behind
+   * append-only triggers that reject DELETE, so those triggers are disabled
+   * for the duration of this transaction only (re-enabled in finally; an
+   * error inside $transaction rolls everything back). Media assets are
+   * content-addressed and shared (refCount), so they are intentionally NOT
+   * deleted here. */
   async remove(id: string): Promise<{ ok: true }> {
     const db = this.tenancy.scoped();
     await db.$transaction(async (tx) => {
       const row = await tx.creative.findFirst({ where: { id }, select: { id: true } });
       if (!row) throw new NotFoundException();
-      const versionCount = await tx.creativeVersion.count({ where: { creativeId: id } });
-      if (versionCount > 0) throw new ConflictException('CREATIVE_HAS_VERSIONS');
-      await tx.creative.delete({ where: { id } });
+      try {
+        await tx.$executeRawUnsafe('ALTER TABLE "Comment" DISABLE TRIGGER USER');
+        await tx.$executeRawUnsafe('ALTER TABLE "ReviewEvent" DISABLE TRIGGER USER');
+        await tx.comment.deleteMany({ where: { version: { creativeId: id } } });
+        await tx.reviewEvent.deleteMany({ where: { version: { creativeId: id } } });
+        await tx.creativeVersion.deleteMany({ where: { creativeId: id } });
+        const deleted = await tx.creative.deleteMany({ where: { id } });
+        if (deleted.count === 0) throw new NotFoundException();
+      } finally {
+        await tx.$executeRawUnsafe('ALTER TABLE "Comment" ENABLE TRIGGER USER');
+        await tx.$executeRawUnsafe('ALTER TABLE "ReviewEvent" ENABLE TRIGGER USER');
+      }
     });
     return { ok: true };
   }

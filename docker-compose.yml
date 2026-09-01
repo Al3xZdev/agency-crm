@@ -69,19 +69,20 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  # Placeholder heartbeat until slice 6 ships main-worker bootstrap.
+  # pg-boss worker: version processing (ffprobe/ffmpeg) + scheduled jobs.
   worker:
     build:
       context: .
       dockerfile: Dockerfile.api
     restart: unless-stopped
-    command: ["node", "-e", "setInterval(() => {}, 2147483647)"]
+    command: ["node", "dist/main-worker.js"]
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       REMINDERS_DISABLED: ${REMINDERS_DISABLED:-false}
       DIGEST_DISABLED: ${DIGEST_DISABLED:-false}
+      HEARTBEAT_PATH: ${HEARTBEAT_PATH:-/tmp/worker.heartbeat}
     volumes:
       - assets:${LOCAL_STORAGE_PATH:-/app/assets}
     depends_on:

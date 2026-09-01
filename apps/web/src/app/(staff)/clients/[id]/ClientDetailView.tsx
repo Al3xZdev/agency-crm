@@ -20,6 +20,14 @@ export function ClientDetailView({ clientId }: { clientId: string }) {
     queryFn: () => apiFetch<ClientDetail>(`/api/clients/${clientId}`),
   });
 
+  function handleBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/clients');
+    }
+  }
+
   if (isError) {
     return (
       <div className="error-banner">
@@ -31,12 +39,18 @@ export function ClientDetailView({ clientId }: { clientId: string }) {
 
   return (
     <div>
-      <div className="breadcrumb">
-        <button className="link-btn" onClick={() => router.push('/clients')}>
-          Clientes
+      <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <button className="link-btn" onClick={handleBack}>
+          <i className="ti ti-arrow-left" aria-hidden="true" />
+          Volver
         </button>
-        {' / '}
-        {isLoading ? '…' : client?.name}
+        <span>
+          <button className="link-btn" onClick={() => router.push('/clients')}>
+            Clientes
+          </button>
+          {' / '}
+          {isLoading ? '…' : client?.name}
+        </span>
       </div>
 
       <div className="client-header">

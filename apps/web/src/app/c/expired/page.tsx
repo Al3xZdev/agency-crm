@@ -1,13 +1,13 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Enlace no válido' };
+export const metadata = { title: 'Enlace expirado' };
 
 /**
- * The SINGLE generic failure page (PR5 restyle): unknown, expired and revoked
- * links all land here — deliberately indistinguishable. Same copy and
- * behavior, design-system styling.
+ * Client portal: session/link expired or revoked. Shares the /c/invalid
+ * presentation idiom (centered settings-card + ti-link-off icon + primary
+ * back link). Arabic-neutral, matches the Spanish client portal.
  */
-export default function InvalidLinkPage() {
+export default function ExpiredLinkPage() {
   return (
     <div
       style={{
@@ -22,18 +22,18 @@ export default function InvalidLinkPage() {
         <i
           className="ti ti-link-off"
           aria-hidden="true"
-          style={{ fontSize: 30, color: 'var(--red)', marginBottom: 10 }}
+          style={{ fontSize: 30, color: 'var(--amber)', marginBottom: 10 }}
         />
-        <h3 style={{ marginTop: 0 }}>Este enlace no es válido</h3>
+        <h3 style={{ marginTop: 0 }}>Este enlace expiró o fue revocado</h3>
         <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>
-          Puede que haya expirado o sido revocado. Pedí uno nuevo a tu contacto de la agencia.
+          Contactá a tu agencia para recibir uno nuevo.
         </p>
         <Link
           href="/"
           className="btn primary"
           style={{ display: 'inline-flex', marginTop: 18, textDecoration: 'none' }}
         >
-          Ir al inicio
+          Volver al inicio
         </Link>
       </div>
     </div>

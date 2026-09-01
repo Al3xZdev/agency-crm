@@ -52,12 +52,16 @@ export function getSessionToken(): string | null {
   return token ? decodeURIComponent(token) : null;
 }
 
-function shouldRedirectToLogin(): boolean {
+/** Where a 401 should bounce, based on the current path.
+ *  - `/login` and `/c/expired` return null: the page handles 401s inline and
+ *    must never redirect to itself.
+ *  - Client portal paths (`/c/*`) bounce to `/c/expired`.
+ *  - Everything else (staff surfaces) bounces to `/login`. */
+function redirectTargetFor401(): string | null {
   const { pathname } = window.location;
-  // Staff surfaces bounce to /login on 401. The login page itself and the
-  // client portal (/c/*) must NOT bounce — the client portal has its own
-  // session flow and errors render inline there instead.
-  return !pathname.startsWith('/login') && !pathname.startsWith('/c');
+  if (pathname === '/login' || pathname === '/c/expired') return null;
+  if (pathname.startsWith('/c')) return '/c/expired';
+  return '/login';
 }
 
 function isJsonBody(value: unknown): boolean {
@@ -125,9 +129,8 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   if (res.status === 401) {
     const payload = await readPayload(res);
-    if (shouldRedirectToLogin()) {
-      window.location.href = '/login';
-    }
+    const target = redirectTargetFor401();
+    if (target) window.location.href = target;
     throw new ApiError(payload?.message ?? 'Tu sesión expiró.', 401, payload?.fieldErrors ?? null);
   }
 

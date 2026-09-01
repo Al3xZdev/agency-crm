@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '../../lib/api';
+import { useToast } from '../../lib/toast';
 
 /**
  * Backend-adapted: POST /api/clients returns `{ id }` (created row), so the
@@ -44,6 +45,7 @@ export function CreateClientModal({
   const [showMore, setShowMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -60,6 +62,7 @@ export function CreateClientModal({
       }),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
+      showToast(`Cliente "${form.name.trim()}" creado`);
       onCreated({ id: created.id, name: form.name.trim() });
     },
     onError: (err) => {

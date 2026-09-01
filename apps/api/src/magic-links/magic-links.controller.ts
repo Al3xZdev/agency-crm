@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { currentPrincipal } from '../tenancy/request-context.als';
@@ -55,6 +55,13 @@ export class MagicLinksController {
   @HttpCode(200)
   async revoke(@Param('id') id: string): Promise<{ revokedSessions: number }> {
     return this.magicLinks.revoke(currentPrincipal()!, id);
+  }
+
+  /** Hard-delete a link (history cleanup) — SUPER_ADMIN/ACCOUNT_MANAGER only. */
+  @Delete('magic-links/:id')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER')
+  async remove(@Param('id') id: string): Promise<{ ok: true }> {
+    return this.magicLinks.remove(currentPrincipal()!, id);
   }
 
   /**

@@ -14,30 +14,55 @@ export class MediaService {
   ) {}
 
   async stream(key: string, req: Request, res: Response): Promise<void> {
-    const asset = await this.prisma.asset.findUnique({
-      where: { sha256: key },
-      select: {
-        id: true,
-        mime: true,
-        sha256: true,
-        byteSize: true,
-        storageKey: true,
-        versions: { select: { agencyId: true, clientId: true }, take: 1 },
-        posters: { select: { agencyId: true, clientId: true }, take: 1 },
-      },
-    });
+    // The web serves media from `asset.storageKey` (`assets/<sha256>`); the
+    // single-segment `<sha256>` form is kept for compatibility.
+    const asset = key.includes('/')
+      ? await this.prisma.asset.findFirst({
+          where: { storageKey: key },
+          select: {
+            id: true,
+            mime: true,
+            sha256: true,
+            byteSize: true,
+            storageKey: true,
+            versions: { select: { agencyId: true, clientId: true } },
+            posters: { select: { agencyId: true, clientId: true } },
+          },
+        })
+      : await this.prisma.asset.findUnique({
+          where: { sha256: key },
+          select: {
+            id: true,
+            mime: true,
+            sha256: true,
+            byteSize: true,
+            storageKey: true,
+            versions: { select: { agencyId: true, clientId: true } },
+            posters: { select: { agencyId: true, clientId: true } },
+          },
+        });
 
     if (!asset) throw new NotFoundException();
 
     const principal = currentPrincipal();
     if (!principal) throw new ForbiddenException();
 
-    const scope = asset.versions[0] ?? asset.posters[0];
-    if (!scope) throw new NotFoundException();
+    // The asset is content-addressed and MAY be shared across many versions
+    // (and clients) that dedupe to the same sha256. Authorizing against a
+    // single arbitrary `versions[0]` is wrong: a shared asset would randomly
+    // 403/200 depending on which row Prisma returns. Instead require only
+    // that the caller can reach at least ONE version/poster owner.
+    const owners = [...asset.versions, ...asset.posters];
+    if (owners.length === 0) throw new NotFoundException();
 
-    if (scope.agencyId !== principal.agencyId) throw new ForbiddenException();
-    if ('clientId' in principal && principal.clientId && principal.clientId !== scope.clientId) {
-      throw new ForbiddenException();
+    const inAgency = owners.some((o) => o.agencyId === principal.agencyId);
+    if (!inAgency) throw new ForbiddenException();
+
+    if ('clientId' in principal && principal.clientId) {
+      const ownClient = owners.some(
+        (o) => o.agencyId === principal.agencyId && o.clientId === principal.clientId,
+      );
+      if (!ownClient) throw new ForbiddenException();
     }
 
     res.setHeader('Content-Type', asset.mime);

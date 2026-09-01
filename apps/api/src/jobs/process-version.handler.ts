@@ -126,17 +126,34 @@ export class ProcessVersionHandler {
       const posterStream = Readable.from(posterBytes);
       const posterResult = await this.storage.driver.admit(posterStream, posterBytes.length);
 
-      const posterAsset = await this.prisma.asset.create({
-        data: {
-          agencyId,
-          sha256: posterResult.sha256,
-          mime: 'image/jpeg',
-          byteSize: BigInt(posterBytes.length),
-          storageKey: posterResult.storageKey,
-          refCount: 1,
-        },
+      // Content-addressed dedup for the derived poster: identical source
+      // bytes produce an identical poster, so reuse the existing row instead
+      // of hitting the unique sha256 constraint (mirrors uploads.service).
+      const existingPoster = await this.prisma.asset.findFirst({
+        where: { sha256: posterResult.sha256, agencyId },
         select: { id: true },
       });
+
+      let posterAsset: { id: string };
+      if (existingPoster) {
+        await this.prisma.asset.updateMany({
+          where: { id: existingPoster.id, agencyId },
+          data: { refCount: { increment: 1 } },
+        });
+        posterAsset = existingPoster;
+      } else {
+        posterAsset = await this.prisma.asset.create({
+          data: {
+            agencyId,
+            sha256: posterResult.sha256,
+            mime: 'image/jpeg',
+            byteSize: BigInt(posterBytes.length),
+            storageKey: posterResult.storageKey,
+            refCount: 1,
+          },
+          select: { id: true },
+        });
+      }
 
       await this.prisma.$transaction(async (tx) => {
         await tx.creativeVersion.update({

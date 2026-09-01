@@ -14,6 +14,7 @@ function startOfCurrentWeek(now = new Date()): Date {
 
 export interface ActivityItem {
   id: string;
+  creativeId: string;
   creativeName: string;
   clientName: string;
   versionNumber: number;
@@ -76,6 +77,7 @@ export class DashboardService {
         createdAt: true,
         creative: {
           select: {
+            id: true,
             title: true,
             campaign: { select: { client: { select: { name: true } } } },
           },
@@ -86,6 +88,7 @@ export class DashboardService {
     const hasMore = rows.length > limit;
     const items: ActivityItem[] = rows.slice(0, limit).map((v) => ({
       id: v.id,
+      creativeId: v.creative?.id ?? '',
       creativeName: v.creative?.title ?? 'Untitled creative',
       clientName: v.creative?.campaign?.client?.name ?? 'Unknown client',
       versionNumber: v.versionNo,

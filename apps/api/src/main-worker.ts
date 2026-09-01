@@ -20,6 +20,10 @@ async function bootstrap(): Promise<void> {
   const pgBoss = app.get(PgBossService);
   const handler = app.get(ProcessVersionHandler);
 
+  // pg-boss `work()` requires the queue to already exist; the API only
+  // creates it lazily on first send, so create it here explicitly.
+  await pgBoss.boss.createQueue(PROCESS_VERSION);
+
   await pgBoss.boss.work(
     PROCESS_VERSION,
     { batchSize: config.WORKER_CONCURRENCY },

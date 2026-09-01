@@ -137,6 +137,15 @@ function buildMockDb() {
         Object.assign(row, data);
         return row;
       },
+      updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        let count = 0;
+        for (const row of [...map.values()]) {
+          if (!matchesWhere(row, where)) continue;
+          Object.assign(row, data);
+          count++;
+        }
+        return { count };
+      },
       count: ({ where }: { where?: Record<string, unknown> }) =>
         [...map.values()].filter((r) => !where || matchesWhere(r, where)).length,
     };

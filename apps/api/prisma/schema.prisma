@@ -65,6 +65,7 @@ enum CommentAnchor {
   PLAIN
   PIN
   RANGE
+  DRAW
 }
 
 enum ActorType {
@@ -272,6 +273,7 @@ model CreativeVersion {
   reviewStatus    ReviewStatus @default(NONE)
   reviewStartedAt DateTime? // set on PROCESSING→READY (reminder baseline)
   lastReminderAt  DateTime?
+  removedAt      DateTime? // soft-delete marker: hide from queries, preserve audit trail
   createdAt       DateTime     @default(now())
 
   creative     Creative      @relation(fields: [creativeId], references: [id])
@@ -302,8 +304,10 @@ model Comment {
   posY         Int?
   startMs      Int?
   endMs        Int?
+  strokes      Json? // DRAW stroke payload (JSON array of strokes)
   body         String        @db.Text
   resolved     Boolean       @default(false)
+  removedAt    DateTime?     // soft-delete marker: hide from queries, preserve audit trail
   createdAt    DateTime      @default(now()) // append-only: NO update/delete routes exist
 
   version    CreativeVersion @relation(fields: [versionId], references: [id])

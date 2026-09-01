@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '../../lib/api';
+import { useToast } from '../../lib/toast';
 import { Client } from '../../lib/types';
 
 /**
@@ -24,6 +25,7 @@ export function CreateCampaignModal({
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const { data: clients, isLoading: loadingClients } = useQuery({
     queryKey: ['clients', ''],
@@ -40,6 +42,7 @@ export function CreateCampaignModal({
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
+      showToast(`Campaña "${name.trim()}" creada`);
       onCreated({ id: created.id, name: name.trim() });
     },
     onError: (err) => {

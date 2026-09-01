@@ -36,7 +36,7 @@ export type CreativeStatus =
   | 'CHANGES_REQUESTED'
   | 'UPLOAD_FAILED';
 
-export type CommentAnchor = 'PLAIN' | 'PIN' | 'RANGE';
+export type CommentAnchor = 'PLAIN' | 'PIN' | 'RANGE' | 'DRAW';
 
 export type ActorType = 'STAFF' | 'CLIENT';
 
@@ -45,6 +45,22 @@ export type VersionState = 'PROCESSING' | 'READY' | 'FAILED';
 export type ReviewStatus = 'NONE' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
 
 export type ReviewDecision = 'APPROVED' | 'REJECTED' | 'REQUEST_CHANGES';
+
+// ---- drawing strokes (DRAW comment anchors) ----
+
+/** Stroke point normalized to basis points 0..10000 (frame-relative). */
+export interface StrokePoint {
+  x: number;
+  y: number;
+}
+
+/** A freehand stroke: polyline of ≥2 frame-relative points. The API applies
+ * `color`/`width` defaults on parse, so persisted strokes always carry both. */
+export interface Stroke {
+  points: StrokePoint[];
+  color: string;
+  width: number;
+}
 
 // ---- clients ----
 
@@ -141,6 +157,8 @@ export interface CreativeVersionSummary {
   reviewStatus: ReviewStatus;
   textBody: string | null;
   createdAt: string;
+  posterUrl: string | null;
+  videoUrl: string | null;
 }
 
 // ---- comments ----
@@ -153,6 +171,7 @@ export interface Comment {
   posY: number | null;
   startMs: number | null;
   endMs: number | null;
+  strokes: Stroke[] | null;
   body: string;
   authorType: ActorType;
   authorLabel: string;
@@ -192,9 +211,11 @@ export interface DashboardStats {
 }
 
 /** GET /api/dashboard/activity — cursor-paginated feed row.
- * `status` carries the version state string (PROCESSING/READY/FAILED). */
+ * `status` carries the version state string (PROCESSING/READY/FAILED);
+ * `creativeId` is the owning creative for deep-linking to the modern view. */
 export interface ActivityItem {
   id: string;
+  creativeId: string;
   creativeName: string;
   clientName: string;
   versionNumber: number;
