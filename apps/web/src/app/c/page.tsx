@@ -18,6 +18,7 @@ interface CreativeRow {
   latestVersionId: string | null;
   latestVersionNo: number | null;
   reviewStatus: string | null;
+  posterUrl: string | null;
 }
 
 type DecidedStatus = 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
@@ -108,7 +109,11 @@ export default function ClientDashboard() {
             {pending.map((c) => (
               <div key={c.id} className="review-card">
                 <div className="thumb">
-                  <i className={`ti ${kindIcon(c.kind)}`} aria-hidden="true" />
+                  {c.posterUrl ? (
+                    <img src={`/api/media/${c.posterUrl}`} alt={c.title} className="review-thumb" />
+                  ) : (
+                    <i className={`ti ${kindIcon(c.kind)}`} aria-hidden="true" />
+                  )}
                 </div>
                 <div className="body">
                   <div className="campaign">Versión {c.latestVersionNo}</div>

@@ -166,12 +166,9 @@ export function LightboxView({ versionId }: { versionId: string }) {
     if (!version) return;
     // Allow pin placement on IMAGE and VIDEO alike (click-to-place on the
     // stage, matching the staff implementation). Skip while drawing on a
-    // frozen frame or when the click lands on the video's control bar.
+    // frozen frame; clicks on the video frame are allowed so clients can pin
+    // points directly on the video (the position math uses the canvas rect).
     if (drawingEnabled) return;
-    const target = e.target as HTMLElement | null;
-    // Clicks on the native <video> element (its control bar) must not place
-    // a pin — the scrubber/drawing toolbar handle those interactions.
-    if (target instanceof HTMLVideoElement) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const leftPct = ((e.clientX - rect.left) / rect.width) * 100;
     const topPct = ((e.clientY - rect.top) / rect.height) * 100;
@@ -249,7 +246,7 @@ export function LightboxView({ versionId }: { versionId: string }) {
     setActiveCommentId(commentId);
     document
       .getElementById(`comment-${commentId}`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     setTimeout(() => setActiveCommentId((current) => (current === commentId ? null : current)), 2000);
   }
 

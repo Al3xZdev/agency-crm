@@ -1,6 +1,6 @@
 'use client';
 
-import { MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react';
+import { MouseEvent as ReactMouseEvent, useRef, useState } from 'react';
 
 import { formatMs } from '../../lib/format';
 import type { Comment } from '../../lib/types';
@@ -34,8 +34,11 @@ export function VideoScrubber({
   const isDisabled = disabled || !hasDuration;
 
   const trackRef = useRef<HTMLDivElement>(null);
-  const anchorRef = useRef<number | null>(null);
-  const [dragging, setDragging] = useState(false);
+
+  // Two-click range selection: the first click marks the START POINT, the
+  // second marks the END POINT. `startPick` holds the first click's ms while
+  // we wait for the second click; `draft` is the finalized range.
+  const [startPick, setStartPick] = useState<number | null>(null);
   const [draft, setDraft] = useState<RangeDraft | null>(null);
   const [draftText, setDraftText] = useState('');
 
@@ -49,67 +52,47 @@ export function VideoScrubber({
     return Math.min(totalMs, Math.max(0, ms));
   }
 
-  function handleMouseDown(e: ReactMouseEvent) {
+  function handleClick(e: ReactMouseEvent) {
     // Never start a range while disabled OR before the real duration is known.
     if (disabled || totalMs <= 0) return;
+
     const ms = msFromClientX(e.clientX);
-    anchorRef.current = ms;
-    setDragging(true);
-    setDraft({ startMs: ms, endMs: ms });
+
+    // First click: mark the START POINT and wait for the end point.
+    if (startPick === null) {
+      setStartPick(ms);
+      setDraft(null);
+      setDraftText('');
+      return;
+    }
+
+    // Second click: finalize the range between the two points.
+    const a = startPick;
+    let endMs = Math.max(a, ms);
+    const startMs = Math.min(a, ms);
+    // Two clicks at the same spot: give it a small width for a point-in-time
+    // comment instead of a zero-width (invisible) draft.
+    if (startMs === endMs) {
+      endMs = Math.min(totalMs, startMs + 500);
+    }
+    setDraft({ startMs, endMs });
+    setStartPick(null);
     setDraftText('');
   }
-
-  // The drag can leave the track, so we listen on window while it lasts.
-  useEffect(() => {
-    if (!dragging) return;
-
-    function handleMove(e: globalThis.MouseEvent) {
-      if (anchorRef.current === null) return;
-      const ms = msFromClientX(e.clientX);
-      const anchor = anchorRef.current;
-      setDraft({
-        startMs: clampMs(Math.min(anchor, ms)),
-        endMs: clampMs(Math.max(anchor, ms)),
-      });
-    }
-
-    function handleUp() {
-      setDragging(false);
-    }
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragging]);
 
   function submitDraft() {
     if (!draft || !draftText.trim()) return;
-    // A plain click (no drag) yields a zero-width draft; give it a natural
-    // 500ms-wide point comment instead. A real drag always keeps the actual
-    // endMs captured while dragging — never re-clamped here.
-    const endMs =
-      draft.endMs === draft.startMs ? clampMs(draft.startMs + 500) : draft.endMs;
-    onCreateRange(draft.startMs, endMs, draftText.trim());
+    onCreateRange(draft.startMs, draft.endMs, draftText.trim());
     setDraft(null);
     setDraftText('');
   }
-
-  const displayEndForDraft = draft
-    ? draft.endMs === draft.startMs
-      ? clampMs(draft.startMs + 500)
-      : draft.endMs
-    : 0;
 
   return (
     <div className="scrubber">
       <div
         ref={trackRef}
         className={isDisabled ? 'scrubber-track disabled' : 'scrubber-track'}
-        onMouseDown={handleMouseDown}
+        onClick={handleClick}
       >
         {comments.map((comment, i) => {
           const start = clampMs(comment.startMs ?? 0);
@@ -134,6 +117,18 @@ export function VideoScrubber({
           );
         })}
 
+        {/* First point placed, waiting for the second click: show a narrow
+            marker at the start position. */}
+        {startPick !== null && (
+          <div
+            className="scrubber-draft"
+            style={{
+              left: `${(startPick / totalMs) * 100}%`,
+              width: '1%',
+            }}
+          />
+        )}
+
         {draft && (
           <div
             className="scrubber-draft"
@@ -150,10 +145,10 @@ export function VideoScrubber({
         <span>{formatMs(totalMs)}</span>
       </div>
 
-      {draft && !dragging && (
+      {draft && (
         <div className="pin-popover scrubber-popover" onClick={(e) => e.stopPropagation()}>
           <div className="scrubber-popover-range">
-            {formatMs(draft.startMs)} – {formatMs(displayEndForDraft)}
+            {formatMs(draft.startMs)} – {formatMs(draft.endMs)}
           </div>
           <textarea
             autoFocus
@@ -179,8 +174,11 @@ export function VideoScrubber({
         </div>
       )}
 
-      {!isDisabled && !draft && (
-        <p className="canvas-hint">Arrastrá sobre la línea de tiempo para comentar un tramo del video.</p>
+      {!isDisabled && startPick !== null && (
+        <p className="canvas-hint">Clic para marcar el final del tramo</p>
+      )}
+      {!isDisabled && startPick === null && !draft && (
+        <p className="canvas-hint">Hacé clic en el punto de inicio y luego en el punto de fin para comentar un tramo del video.</p>
       )}
     </div>
   );
