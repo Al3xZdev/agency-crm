@@ -84,6 +84,13 @@ export const createCommentSchema = z
   );
 export type CreateCommentDto = z.infer<typeof createCommentSchema>;
 
+/** PATCH /api/versions/:versionId/comments/:commentId — staff owners may
+ * rewrite their own comment body; the anchor payload is immutable. */
+export const updateCommentSchema = z.object({
+  body: z.string().trim().min(1).max(5000),
+});
+export type UpdateCommentDto = z.infer<typeof updateCommentSchema>;
+
 export const castDecisionSchema = z.object({
   decision: z.enum(['APPROVED', 'REJECTED', 'REQUEST_CHANGES']),
 });

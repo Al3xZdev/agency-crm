@@ -1,6 +1,8 @@
-import { Controller, Delete, Get, Param } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch } from '@nestjs/common';
 
+import { updateCommentSchema } from '@agency-crm/shared';
 import { Roles } from '../auth/roles.decorator';
+import { currentPrincipal } from '../tenancy/request-context.als';
 import { VersionsService } from './versions.service';
 
 @Controller()
@@ -22,7 +24,18 @@ export class VersionsController {
   @Delete('versions/:versionId/comments/:commentId')
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   removeComment(@Param('versionId') versionId: string, @Param('commentId') commentId: string) {
-    return this.versions.removeComment(versionId, commentId);
+    return this.versions.removeComment(versionId, commentId, currentPrincipal()!);
+  }
+
+  @Patch('versions/:versionId/comments/:commentId')
+  @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
+  updateComment(
+    @Param('versionId') versionId: string,
+    @Param('commentId') commentId: string,
+    @Body() body: unknown,
+  ) {
+    const dto = updateCommentSchema.parse(body);
+    return this.versions.updateComment(versionId, commentId, dto, currentPrincipal()!);
   }
 
   @Delete('versions/:versionId')

@@ -11,7 +11,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import type { CampaignStatus, Prisma } from '@prisma/client';
+import type { CampaignStatus, Prisma, ReviewStatus } from '@prisma/client';
 import { z } from 'zod';
 
 import { Roles } from '../auth/roles.decorator';
@@ -65,6 +65,10 @@ export interface CreativeSummary {
   kind: string;
   status: string;
   currentVersionNo: number;
+  /** Poster of the latest (max versionNo) version, if any — frame thumbnail. */
+  latestPosterUrl: string | null;
+  /** Review status of the latest version — drives the frame decision stamp. */
+  latestReviewStatus: ReviewStatus;
   updatedAt: Date;
 }
 
@@ -138,7 +142,9 @@ export class CampaignsService {
   }
 
   /** Campaign detail (PR2): CampaignListItem + creatives with currentVersionNo
-   * = max versionNo of each creative (0 when the creative has no versions). */
+   * = max versionNo of each creative (0 when the creative has no versions),
+   * plus `latestPosterUrl`/`latestReviewStatus` derived from that same latest
+   * version — frame thumbnails and decision stamps on the contact sheet. */
   async getDetail(id: string): Promise<CampaignDetail> {
     const db = this.tenancy.scoped();
     const row = await db.campaign.findFirst({
@@ -156,24 +162,46 @@ export class CampaignsService {
     const versions = creativeIds.length
       ? await db.creativeVersion.findMany({
           where: { creativeId: { in: creativeIds } },
-          select: { creativeId: true, versionNo: true },
+          select: {
+            creativeId: true,
+            versionNo: true,
+            reviewStatus: true,
+            poster: { select: { storageKey: true } },
+            asset: { select: { storageKey: true } },
+          },
         })
       : [];
-    const maxVersionNo = new Map<string, number>();
+    // Latest (max versionNo) version per creative drives both the thumbnail
+    // and the review stamp: a more recent upload replaces the old decision.
+    const latest = new Map<
+      string,
+      { versionNo: number; reviewStatus: ReviewStatus; posterUrl: string | null }
+    >();
     for (const v of versions) {
-      maxVersionNo.set(v.creativeId, Math.max(maxVersionNo.get(v.creativeId) ?? 0, v.versionNo));
+      const prev = latest.get(v.creativeId);
+      if (prev && prev.versionNo >= v.versionNo) continue;
+      latest.set(v.creativeId, {
+        versionNo: v.versionNo,
+        reviewStatus: v.reviewStatus,
+        posterUrl: v.poster?.storageKey ?? v.asset?.storageKey ?? null,
+      });
     }
 
     return {
       ...this.mapListItem(row),
-      creatives: creatives.map((c) => ({
-        id: c.id,
-        title: c.title,
-        kind: c.kind,
-        status: c.status,
-        currentVersionNo: maxVersionNo.get(c.id) ?? 0,
-        updatedAt: c.updatedAt,
-      })),
+      creatives: creatives.map((c) => {
+        const latestVersion = latest.get(c.id);
+        return {
+          id: c.id,
+          title: c.title,
+          kind: c.kind,
+          status: c.status,
+          currentVersionNo: latestVersion?.versionNo ?? 0,
+          latestPosterUrl: latestVersion?.posterUrl ?? null,
+          latestReviewStatus: latestVersion?.reviewStatus ?? 'NONE',
+          updatedAt: c.updatedAt,
+        };
+      }),
     };
   }
 

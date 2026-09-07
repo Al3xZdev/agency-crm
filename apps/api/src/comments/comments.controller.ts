@@ -20,6 +20,6 @@ export class CommentsController {
   @Get('versions/:versionId/comments')
   @Roles('SUPER_ADMIN', 'ACCOUNT_MANAGER', 'CREATIVE')
   list(@Param('versionId') versionId: string) {
-    return this.comments.listByVersion(versionId);
+    return this.comments.listByVersion(versionId, currentPrincipal());
   }
 }

@@ -308,6 +308,7 @@ model Comment {
   body         String        @db.Text
   resolved     Boolean       @default(false)
   removedAt    DateTime?     // soft-delete marker: hide from queries, preserve audit trail
+  editedAt     DateTime?     @db.Timestamptz(6) // set when the owning staff user rewrites `body`
   createdAt    DateTime      @default(now()) // append-only: NO update/delete routes exist
 
   version    CreativeVersion @relation(fields: [versionId], references: [id])

@@ -183,6 +183,15 @@ function buildMockDb() {
         Object.assign(row, data);
         return row;
       },
+      updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+        let n = 0;
+        for (const r of map.values()) {
+          if (!matchesWhere(r, where)) continue;
+          Object.assign(r, data);
+          n++;
+        }
+        return { count: n };
+      },
       delete: ({ where }: { where: Record<string, unknown> }) => {
         const row = [...map.values()].find((r) => matchesWhere(r, where));
         if (!row) {
@@ -283,6 +292,15 @@ function buildMockDb() {
       Object.assign(row, data);
       return row;
     },
+    updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      let n = 0;
+      for (const v of versions.values()) {
+        if (!matchesWhere(v, where)) continue;
+        Object.assign(v, data);
+        n++;
+      }
+      return { count: n };
+    },
     count: ({ where }: { where?: Record<string, unknown> }) =>
       [...versions.values()].filter((r) => !where || matchesWhere(r, where)).length,
   };
@@ -314,7 +332,7 @@ function buildMockDb() {
     _seedVersion(id: string, creativeId: string, clientId: string, data: Record<string, unknown>, agencyId = 'agency_1') {
       versions.set(id, {
         id, agencyId, clientId, creativeId, versionNo: 1, state: 'READY', reviewStatus: 'NONE',
-        textBody: null, assetId: null, posterId: null, failReason: null, durationMs: null,
+        textBody: null, assetId: null, posterId: null, failReason: null, durationMs: null, removedAt: null,
         createdAt: new Date(), ...data,
       });
       return versions.get(id)!;
@@ -617,6 +635,7 @@ describe('client API (slice 9)', () => {
         startMs: null,
         endMs: null,
         body: 'Looks good!',
+        removedAt: null,
         createdAt: new Date(),
       };
       db._comments.set('cm_1', comment);

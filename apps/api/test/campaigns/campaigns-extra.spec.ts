@@ -95,8 +95,9 @@ function filterSelect<T extends Record<string, unknown>>(row: T, select?: Record
     }
     if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
       const nested = (row as Record<string, unknown>)[k];
-      if (nested != null) out[k] = filterSelect(nested as Record<string, unknown>, v as Record<string, unknown>);
-      else if ('select' in v) out[k] = null;
+      // Prisma relation form: { select: { ... } } — unwrap it before recursing.
+      const inner = 'select' in v ? (v as { select: Record<string, unknown> }).select : v;
+      if (nested != null) out[k] = filterSelect(nested as Record<string, unknown>, inner);
       else out[k] = null;
     } else if (v === true) {
       out[k] = (row as Record<string, unknown>)[k];
@@ -242,6 +243,7 @@ function buildMockDb() {
   const db = {
     _campaigns: campaigns,
     _creatives: creatives,
+    _versions: versions,
     _seedClient(id: string, name: string, agencyId = 'agency_1') {
       clients.set(id, { id, agencyId, name, contact: null, createdAt: new Date() });
       return clients.get(id)!;
@@ -449,7 +451,7 @@ describe('campaigns flat list / detail / PATCH (PR2)', () => {
   });
 
   describe('GET /campaigns/:id', () => {
-    it('returns the campaign with creatives and currentVersionNo = max versionNo', async () => {
+    it('returns the campaign with creatives, currentVersionNo and latest version poster/stamp', async () => {
       const auth = staffAuth('ACCOUNT_MANAGER');
       db._seedCampaign('cmp_1', 'client_1');
       db._seedCreative('cr_1', 'cmp_1', 'client_1', 'agency_1', { title: 'Hero Banner', kind: 'IMAGE', status: 'APPROVED', updatedAt: new Date('2026-01-03T00:00:00Z') });
@@ -457,6 +459,10 @@ describe('campaigns flat list / detail / PATCH (PR2)', () => {
       db._seedVersion('v1', 'cr_1', 'cmp_1', 'client_1', 1);
       db._seedVersion('v2', 'cr_1', 'cmp_1', 'client_1', 2);
       db._seedVersion('v3', 'cr_1', 'cmp_1', 'client_1', 3);
+      // v3 is the latest version: it carries the poster + review stamp that
+      // drive the frame thumbnail and decision badge.
+      db._versions.get('v3')!['reviewStatus'] = 'APPROVED';
+      db._versions.get('v3')!['poster'] = { storageKey: 'poster-v3.png' };
       // cr_2 has NO versions -> currentVersionNo 0
 
       const res = await request(app.getHttpServer())
@@ -478,9 +484,11 @@ describe('campaigns flat list / detail / PATCH (PR2)', () => {
         kind: 'IMAGE',
         status: 'APPROVED',
         currentVersionNo: 3,
+        latestPosterUrl: 'poster-v3.png',
+        latestReviewStatus: 'APPROVED',
         updatedAt: '2026-01-03T00:00:00.000Z',
       });
-      expect(res.body.creatives[1]).toMatchObject({ id: 'cr_2', title: 'Social Cut', kind: 'VIDEO', currentVersionNo: 0 });
+      expect(res.body.creatives[1]).toMatchObject({ id: 'cr_2', title: 'Social Cut', kind: 'VIDEO', currentVersionNo: 0, latestPosterUrl: null, latestReviewStatus: 'NONE' });
     });
 
     it('returns an empty creatives array when the campaign has no creatives', async () => {

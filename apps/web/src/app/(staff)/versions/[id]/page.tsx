@@ -3,10 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import { apiJson } from '../../../../lib/api';
+import { formatMs } from '../../../../lib/format';
 import { ConfirmModal } from '../../../../components/staff/ConfirmModal';
+import { DrawingOverlay } from '../../../../components/client/DrawingOverlay';
+import type { Stroke } from '../../../../lib/types';
 
 interface VersionDetail {
   id: string;
@@ -32,28 +35,50 @@ interface CommentRow {
   posY: number | null;
   startMs: number | null;
   endMs: number | null;
+  strokes: Stroke[] | null;
   body: string;
   authorType: string;
   authorLabel: string;
   createdAt: string;
+  editedAt: string | null;
+  canDelete: boolean;
+  canEdit: boolean;
 }
 
 const ANCHOR_TYPES = ['PLAIN', 'PIN', 'RANGE'] as const;
 
-/** Backend anchors carry basis points (0–10000) and milliseconds — render
- * human units: percentages (1 decimal) and seconds. */
-function DescribeAnchor(c: CommentRow): string {
-  if (c.anchor === 'PIN' && c.posX != null && c.posY != null) {
-    const x = Math.round((c.posX / 100) * 10) / 10;
-    const y = Math.round((c.posY / 100) * 10) / 10;
-    return ` @ (${x}%, ${y}%)`;
+/** Media-time badge for anchored comments (mirrors CommentThread): PIN shows
+ * `#N · mm:ss`, RANGE/DRAW show their mm:ss window as a mono pill. PLAIN
+ * comments render nothing. */
+function AnchorBadge(c: CommentRow, pinNumber?: number): ReactNode {
+  if (c.anchor === 'PIN' && pinNumber != null) {
+    return (
+      <span className="time-badge">
+        <i className="ti ti-pin" aria-hidden="true" />
+        #{pinNumber}
+        {c.startMs != null ? ` · ${formatMs(c.startMs)}` : ''}
+      </span>
+    );
   }
   if (c.anchor === 'RANGE' && c.startMs != null) {
-    const desde = `${(c.startMs / 1000).toFixed(1)}s`;
-    if (c.endMs != null) return ` [${desde} – ${(c.endMs / 1000).toFixed(1)}s]`;
-    return ` [${desde} –]`;
+    const end = c.endMs != null ? ` – ${formatMs(c.endMs)}` : '';
+    return (
+      <span className="time-badge">
+        <i className="ti ti-timeline" aria-hidden="true" />
+        {formatMs(c.startMs)}
+        {end}
+      </span>
+    );
   }
-  return '';
+  if (c.anchor === 'DRAW' && c.startMs != null) {
+    return (
+      <span className="time-badge">
+        <i className="ti ti-brush" aria-hidden="true" />
+        {formatMs(c.startMs)}
+      </span>
+    );
+  }
+  return null;
 }
 
 export default function VersionReviewPage() {
@@ -73,6 +98,14 @@ export default function VersionReviewPage() {
   const [deleting, setDeleting] = useState(false);
   const [confirmingDeleteVersion, setConfirmingDeleteVersion] = useState(false);
   const [confirmingDeleteCommentId, setConfirmingDeleteCommentId] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+  // VIDEO playback state drives DRAW overlays so strokes align with the
+  // frozen frame (mirrors CreativeDetailView/LightboxView).
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [currentTimeMs, setCurrentTimeMs] = useState(0);
+  const [paused, setPaused] = useState(true);
 
   const version = useQuery({
     queryKey: ['version', versionId],
@@ -118,6 +151,21 @@ export default function VersionReviewPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['comments', versionId] });
       void queryClient.invalidateQueries({ queryKey: ['version', versionId] });
+    },
+    onError: (err: Error) => setCommentError(err.message),
+  });
+
+  const editComment = useMutation({
+    mutationFn: ({ commentId, body: nextBody }: { commentId: string; body: string }) =>
+      apiJson<CommentRow>(`/api/versions/${versionId}/comments/${commentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body: nextBody }),
+      }),
+    onSuccess: () => {
+      setCommentError(null);
+      setEditingCommentId(null);
+      setEditBody('');
+      void queryClient.invalidateQueries({ queryKey: ['comments', versionId] });
     },
     onError: (err: Error) => setCommentError(err.message),
   });
@@ -204,6 +252,39 @@ export default function VersionReviewPage() {
 
   const v = version.data!;
 
+  const pinComments = (comments.data ?? []).filter((c) => c.anchor === 'PIN');
+
+  /** Numbered pin overlay for PIN comments (same numbering as the list: i+1). */
+  function renderPins(): ReactNode {
+    if (pinComments.length === 0) return null;
+    return pinComments.map((c, i) => (
+      <div
+        key={c.id}
+        className="pin"
+        // posX/posY are 0..10000 basis points; /100 = percentage.
+        style={{ top: `${(c.posY ?? 0) / 100}%`, left: `${(c.posX ?? 0) / 100}%` }}
+        title={`#${i + 1} · ${formatMs(c.startMs ?? 0)}`}
+      >
+        {i + 1}
+        <span className="pin-time">{formatMs(c.startMs ?? 0)}</span>
+      </div>
+    ));
+  }
+
+  /** Read-mode DRAW overlays (mirrors CreativeDetailView): for VIDEO the strokes
+   * only render while paused on the matching frame; for IMAGE they always do. */
+  function renderDraws(forImage: boolean): ReactNode {
+    const draws = (comments.data ?? []).filter((c) => c.anchor === 'DRAW' && (c.strokes?.length ?? 0) > 0);
+    if (draws.length === 0) return null;
+    return draws.map((c) => {
+      const show = forImage || (paused && Math.abs(currentTimeMs - (c.startMs ?? 0)) < 150);
+      if (!show) return null;
+      return (
+        <DrawingOverlay key={c.id} active={false} containerRef={stageRef} strokes={c.strokes ?? []} paused />
+      );
+    });
+  }
+
   return (
     <>
       <h1>Versión {v.versionNo}</h1>
@@ -238,19 +319,31 @@ export default function VersionReviewPage() {
           <p style={{ color: '#666' }}>Procesando{v.failReason ? `: ${v.failReason}` : '…'}</p>
         )}
         {v.state === 'READY' && v.asset && v.asset.mime.startsWith('image') && (
-          <img
-            src={`/media/${v.posterUrl ?? v.asset.storageKey}`}
-            alt={`Versión ${v.versionNo}`}
-            style={{ maxWidth: '100%', maxHeight: 500 }}
-          />
+          <div ref={stageRef} className="media-stage">
+            <img
+              src={`/media/${v.posterUrl ?? v.asset.storageKey}`}
+              alt={`Versión ${v.versionNo}`}
+              style={{ maxWidth: '100%', maxHeight: 500, display: 'block', margin: '0 auto' }}
+            />
+            {renderDraws(true)}
+            {renderPins()}
+          </div>
         )}
         {v.state === 'READY' && v.asset && v.asset.mime.startsWith('video') && (
-          <video
-            src={`/media/${v.asset.storageKey}`}
-            poster={v.posterUrl ? `/media/${v.posterUrl}` : undefined}
-            controls
-            style={{ maxWidth: '100%', maxHeight: 500 }}
-          />
+          <div ref={stageRef} className="media-stage">
+            <video
+              ref={videoRef}
+              src={`/media/${v.asset.storageKey}`}
+              poster={v.posterUrl ? `/media/${v.posterUrl}` : undefined}
+              controls
+              style={{ maxWidth: '100%', maxHeight: 500, display: 'block', margin: '0 auto' }}
+              onTimeUpdate={(e) => setCurrentTimeMs(Math.round(e.currentTarget.currentTime * 1000))}
+              onPlay={() => setPaused(false)}
+              onPause={() => setPaused(true)}
+            />
+            {renderDraws(false)}
+            {renderPins()}
+          </div>
         )}
         {v.state === 'READY' && v.textBody && (
           <pre
@@ -271,34 +364,80 @@ export default function VersionReviewPage() {
         <h2>Comentarios ({v.commentsCount})</h2>
         {(comments.data ?? []).length === 0 && <p>Todavía no hay comentarios.</p>}
         <ul style={{ listStyle: 'none', padding: 0 }}>
-          {(comments.data ?? []).map((c) => (
-            <li
-              key={c.id}
-              style={{ padding: '8px 0', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', gap: 8 }}
-            >
-              <div>
-                <strong>{c.authorLabel}</strong> ({c.authorType})
-                {c.anchor === 'DRAW' && (
-                  <span title="Drawing comment" style={{ marginLeft: 6 }}>
-                    <i className="ti ti-brush" aria-hidden="true" />
-                  </span>
-                )}
-                {DescribeAnchor(c)}
-                <span style={{ color: '#999', marginLeft: 8 }}>
-                  {new Date(c.createdAt).toLocaleString()}
-                </span>
-                <p style={{ margin: '4px 0 0' }}>{c.body}</p>
-              </div>
-              <button
-                title="Eliminar comentario"
-                onClick={() => onDeleteComment(c.id)}
-                disabled={deleteComment.isPending}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4, alignSelf: 'flex-start', flexShrink: 0 }}
+          {(comments.data ?? []).map((c) => {
+            const pinNumber = c.anchor === 'PIN' ? pinComments.indexOf(c) + 1 : undefined;
+            const isEditing = editingCommentId === c.id;
+            return (
+              <li
+                key={c.id}
+                style={{ padding: '8px 0', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', gap: 8 }}
               >
-                <i className="ti ti-trash" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
+                <div style={{ flex: 1 }}>
+                  <strong>{c.authorLabel}</strong> ({c.authorType})
+                  {AnchorBadge(c, pinNumber)}
+                  {c.editedAt ? <span className="edited-mark">· editado</span> : null}
+                  <span className="created-meta">{new Date(c.createdAt).toLocaleString()}</span>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                      <textarea
+                        rows={2}
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        placeholder="Editá el comentario…"
+                        style={{ padding: 8 }}
+                      />
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCommentId(null);
+                            setEditBody('');
+                          }}
+                          style={{ padding: '4px 10px' }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!editBody.trim() || editComment.isPending}
+                          onClick={() => editComment.mutate({ commentId: c.id, body: editBody.trim() })}
+                          style={{ padding: '4px 10px' }}
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ margin: '4px 0 0' }}>{c.body}</p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                  {c.canEdit && !isEditing ? (
+                    <button
+                      title="Editar comentario"
+                      onClick={() => {
+                        setEditingCommentId(c.id);
+                        setEditBody(c.body);
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}
+                    >
+                      <i className="ti ti-pencil" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  {c.canDelete ? (
+                    <button
+                      title="Eliminar comentario"
+                      onClick={() => onDeleteComment(c.id)}
+                      disabled={deleteComment.isPending}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', padding: 4 }}
+                    >
+                      <i className="ti ti-trash" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
 
         <form onSubmit={onComment} style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 500, marginTop: 12 }}>

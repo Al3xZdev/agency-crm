@@ -115,6 +115,10 @@ export interface CreativeSummary {
   kind: CreativeKind;
   status: CreativeStatus;
   currentVersionNo: number;
+  /** Poster of the latest (max versionNo) version, if any — frame thumbnail. */
+  latestPosterUrl: string | null;
+  /** Review status of the latest version — drives the frame decision stamp. */
+  latestReviewStatus: ReviewStatus;
   updatedAt: string;
 }
 
@@ -176,6 +180,14 @@ export interface Comment {
   authorType: ActorType;
   authorLabel: string;
   createdAt: string;
+  /** Set once the comment body was edited by its owning staff user. */
+  editedAt: string | null;
+  /** Whether the current principal may delete/soft-remove this comment. */
+  canDelete: boolean;
+  /** Whether the current principal may edit this comment. */
+  canEdit: boolean;
+  /** Owning staff user id — only present for STAFF principals. */
+  authorUserId?: string | null;
 }
 
 // ---- magic links ----

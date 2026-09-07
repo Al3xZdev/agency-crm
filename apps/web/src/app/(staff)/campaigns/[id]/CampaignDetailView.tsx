@@ -171,7 +171,24 @@ export function CampaignDetailView({ campaignId }: { campaignId: string }) {
           >
             <div className="frame-thumb">
               <span className="idx">{String(i + 1).padStart(3, '0')}</span>
-              <i className={`ti ti-${TYPE_ICON[creative.kind]}`} aria-hidden="true" />
+              {creative.latestPosterUrl ? (
+                <img src={`/media/${creative.latestPosterUrl}`} alt={creative.title} />
+              ) : (
+                <span className="frame-thumb-fallback">
+                  <i className={`ti ti-${TYPE_ICON[creative.kind]}`} aria-hidden="true" />
+                </span>
+              )}
+              {creative.latestReviewStatus !== 'NONE' && (
+                <span
+                  className={`banner-stamp ${creative.latestReviewStatus === 'REJECTED' ? 'rejected' : creative.latestReviewStatus === 'CHANGES_REQUESTED' ? 'request_changes' : ''}`}
+                >
+                  {creative.latestReviewStatus === 'APPROVED'
+                    ? '✓ Aprobado'
+                    : creative.latestReviewStatus === 'REJECTED'
+                      ? '✕ Rechazado'
+                      : '! Cambios'}
+                </span>
+              )}
             </div>
             <div className="frame-meta">
               <div className="name">{creative.title}</div>

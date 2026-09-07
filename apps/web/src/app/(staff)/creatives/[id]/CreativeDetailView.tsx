@@ -4,6 +4,7 @@ import { FormEvent, MouseEvent, RefObject, useEffect, useRef, useState } from 'r
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { apiFetch, ApiError } from '../../../../lib/api';
+import { formatMs } from '../../../../lib/format';
 import {
   Comment,
   Creative,
@@ -362,7 +363,13 @@ export function CreativeDetailView({ creativeId }: { creativeId: string }) {
               >
                 ×
               </span>
-              <div className="box" />
+              <div className="box">
+                {version.posterUrl ? (
+                  <img src={`/media/${version.posterUrl}`} alt={`v${version.versionNo}`} />
+                ) : (
+                  <i className="ti ti-photo" aria-hidden="true" />
+                )}
+              </div>
               <div className="mono">v{version.versionNo}</div>
             </button>
           ))}
@@ -562,9 +569,10 @@ function MediaPreview({
         className="pin"
         // posX/posY are 0..10000 basis points; /100 = percentage.
         style={{ top: `${(comment.posY ?? 0) / 100}%`, left: `${(comment.posX ?? 0) / 100}%` }}
-        title={comment.body}
+        title={`#${i + 1} · ${formatMs(comment.startMs ?? 0)}`}
       >
         {i + 1}
+        <span className="pin-time">{formatMs(comment.startMs ?? 0)}</span>
       </div>
     ));
   }
@@ -619,7 +627,7 @@ function MediaPreview({
             onTimeUpdate={(e) => onTimeUpdate(Math.round(e.currentTarget.currentTime * 1000))}
             onPlay={() => onPauseChange(false)}
             onPause={() => onPauseChange(true)}
-            onLoadedMetadata={(e) => onTimeUpdate(0)}
+            onLoadedMetadata={() => onTimeUpdate(0)}
           />
           {drawOverlay()}
           {overlay()}

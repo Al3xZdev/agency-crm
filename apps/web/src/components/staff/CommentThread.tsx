@@ -1,8 +1,9 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, ReactNode, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, ApiError } from '../../lib/api';
+import { formatMs } from '../../lib/format';
 import { Comment, CommentAnchor } from '../../lib/types';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -36,6 +37,8 @@ export function CommentThread({
   const [endMs, setEndMs] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [confirmingDeleteComment, setConfirmingDeleteComment] = useState<Comment | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
   const queryClient = useQueryClient();
 
   // When the parent already loaded the comments (e.g. CreativeDetailView, so it
@@ -90,6 +93,22 @@ export function CommentThread({
     },
   });
 
+  const editComment = useMutation({
+    mutationFn: ({ commentId, nextBody }: { commentId: string; nextBody: string }) =>
+      apiFetch<Comment>(`/api/versions/${versionId}/comments/${commentId}`, {
+        method: 'PATCH',
+        body: { body: nextBody },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', versionId] });
+      setEditingCommentId(null);
+      setEditBody('');
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? err.message : 'No pudimos editar el comentario.');
+    },
+  });
+
   function handleDeleteComment(comment: Comment) {
     setConfirmingDeleteComment(comment);
   }
@@ -126,6 +145,7 @@ export function CommentThread({
           const pinNumber =
             comment.anchor === 'PIN' ? pinComments.indexOf(comment) + 1 : undefined;
           const seekable = comment.anchor === 'DRAW' && !!onSeekDraw;
+          const isEditing = editingCommentId === comment.id;
           return (
             <div
               key={comment.id}
@@ -139,21 +159,69 @@ export function CommentThread({
                 <span className={`role-tag ${comment.authorType.toLowerCase()}`}>
                   {comment.authorType === 'STAFF' ? 'Agencia' : 'Cliente'}
                 </span>
-                <span className="when">{formatAnchor(comment, pinNumber)}</span>
-                <button
-                  type="button"
-                  title="Eliminar comentario"
-                  className="comment-delete"
-                  disabled={deleteComment.isPending}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteComment(comment);
-                  }}
-                >
-                  <i className="ti ti-trash" aria-hidden="true" />
-                </button>
+                {formatAnchor(comment, pinNumber)}
+                {comment.editedAt && <span className="edited-mark">· editado</span>}
+                {comment.canEdit && !isEditing && (
+                  <button
+                    type="button"
+                    title="Editar comentario"
+                    className="comment-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingCommentId(comment.id);
+                      setEditBody(comment.body);
+                    }}
+                  >
+                    <i className="ti ti-pencil" aria-hidden="true" />
+                  </button>
+                )}
+                {comment.canDelete && !isEditing && (
+                  <button
+                    type="button"
+                    title="Eliminar comentario"
+                    className="comment-delete"
+                    disabled={deleteComment.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteComment(comment);
+                    }}
+                  >
+                    <i className="ti ti-trash" aria-hidden="true" />
+                  </button>
+                )}
               </div>
-              <div className="txt">{comment.body}</div>
+              {isEditing ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                  <textarea
+                    rows={2}
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    placeholder="Editá el comentario…"
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => {
+                        setEditingCommentId(null);
+                        setEditBody('');
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={!editBody.trim() || editComment.isPending}
+                      onClick={() => editComment.mutate({ commentId: comment.id, nextBody: editBody.trim() })}
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="txt">{comment.body}</div>
+              )}
             </div>
           );
         })}
@@ -233,26 +301,38 @@ export function CommentThread({
   );
 }
 
-/** Backend anchors carry basis-point coordinates (0–10000). For staff, a PIN
- * comment is shown as its numbered reference `#N` (matching the numbered pin
- * over the stage) — the raw coordinate text is no longer the primary display.
- * Falls back to the coordinate text only when no pin index is available.
- * Range times are shown in seconds. */
-function formatAnchor(comment: Comment, pinNumber?: number): string {
+/** Media-time badge for anchored comments. PIN shows its numbered reference
+ * `#N` (matching the numbered pin over the stage) plus the media time when the
+ * client captured one; RANGE and DRAW show their media times as mm:ss. PLAIN
+ * comments render no badge. Returns null when there is no time to show. */
+function formatAnchor(comment: Comment, pinNumber?: number): ReactNode {
   if (comment.anchor === 'PIN') {
-    if (pinNumber != null) return `pin #${pinNumber}`;
-    if (comment.posX == null) return 'pin';
-    const x = Math.round((comment.posX / 100) * 10) / 10;
-    const y = Math.round(((comment.posY ?? 0) / 100) * 10) / 10;
-    return `pin · x${x}% y${y}%`;
+    if (pinNumber == null) return null;
+    return (
+      <span className="when" title={comment.body}>
+        <i className="ti ti-pin" aria-hidden="true" />
+        #{pinNumber}
+        {comment.startMs != null ? ` · ${formatMs(comment.startMs)}` : ''}
+      </span>
+    );
   }
-  if (comment.anchor === 'RANGE') {
-    if (comment.startMs == null) return 'rango';
-    const desde = `${(comment.startMs / 1000).toFixed(1)}s`;
-    if (comment.endMs != null) {
-      return `rango · desde ${desde} hasta ${(comment.endMs / 1000).toFixed(1)}s`;
-    }
-    return `rango · desde ${desde}`;
+  if (comment.anchor === 'RANGE' && comment.startMs != null) {
+    const end = comment.endMs != null ? ` – ${formatMs(comment.endMs)}` : '';
+    return (
+      <span className="when">
+        <i className="ti ti-timeline" aria-hidden="true" />
+        {formatMs(comment.startMs)}
+        {end}
+      </span>
+    );
   }
-  return 'general';
+  if (comment.anchor === 'DRAW' && comment.startMs != null) {
+    return (
+      <span className="when">
+        <i className="ti ti-brush" aria-hidden="true" />
+        {formatMs(comment.startMs)}
+      </span>
+    );
+  }
+  return null;
 }

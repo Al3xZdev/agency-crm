@@ -281,7 +281,7 @@ function buildMockDb() {
     _seedVersion(id: string, creativeId: string, clientId: string, data: Record<string, unknown>, agencyId = 'agency_1') {
       versions.set(id, {
         id, agencyId, clientId, creativeId, versionNo: 1, state: 'READY', reviewStatus: 'NONE',
-        textBody: null, assetId: null, posterId: null, failReason: null, durationMs: null,
+        textBody: null, assetId: null, posterId: null, failReason: null, durationMs: null, removedAt: null,
         createdAt: new Date(), ...data,
       });
       return versions.get(id)!;

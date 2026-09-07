@@ -88,7 +88,6 @@ export function DrawingOverlay({
       }
       ctx.stroke();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, containerRef, draft, sizeTick]);
 
   // Repaint when the container resizes (canvas buffer follows the rect).

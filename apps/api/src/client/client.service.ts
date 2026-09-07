@@ -99,8 +99,8 @@ export class ClientService {
             body: true,
             authorType: true,
             authorLabel: true,
+            editedAt: true,
             createdAt: true,
-            authorUser: { select: { displayName: true } },
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -155,7 +155,14 @@ export class ClientService {
       creativeTitle: creative?.title ?? 'Untitled',
       posterUrl: rest.poster?.storageKey ?? rest.asset?.storageKey ?? null,
       // Normalize the nullable JSON column: empty array when no strokes.
-      comments: comments.map((comment) => ({ ...comment, strokes: comment.strokes ?? [] })),
+      // Client view is immutable: no edit/delete affordances, no authorship
+      // internals (authorUserId is never selected here).
+      comments: comments.map((comment) => ({
+        ...comment,
+        strokes: comment.strokes ?? [],
+        canDelete: false,
+        canEdit: false,
+      })),
       commentsCount: comments.length,
       reviewEvent: reviewEvents[0] ?? null,
       siblingVersions: { previous, next },

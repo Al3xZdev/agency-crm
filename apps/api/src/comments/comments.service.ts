@@ -66,7 +66,11 @@ export class CommentsService {
     return comment;
   }
 
-  async listByVersion(versionId: string) {
+  /** Staff-facing comment list. STAFF principals get ownership flags
+   * (`canDelete`/`canEdit`: true only for their own STAFF-authored rows) and
+   * the owning `authorUserId` so the UI can gate the edit/delete affordances;
+   * other principals see an immutable mirror without authorship internals. */
+  async listByVersion(versionId: string, principal?: Principal) {
     const db = this.tenancy.scoped();
     const version = await db.creativeVersion.findFirst({
       where: { id: versionId },
@@ -86,15 +90,36 @@ export class CommentsService {
         strokes: true,
         body: true,
         authorType: true,
+        authorUserId: true,
         authorLabel: true,
+        editedAt: true,
         createdAt: true,
-        authorUser: { select: { displayName: true } },
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    // Normalize the nullable JSON column: empty array when no strokes.
-    return comments.map((comment) => ({ ...comment, strokes: comment.strokes ?? [] }));
+    const isStaff = principal?.kind === 'STAFF' && principal.userId != null;
+    return comments.map((comment) => {
+      const owned = isStaff && comment.authorType === 'STAFF' && comment.authorUserId === principal!.userId;
+      const mapped = {
+        id: comment.id,
+        anchor: comment.anchor,
+        posX: comment.posX,
+        posY: comment.posY,
+        startMs: comment.startMs,
+        endMs: comment.endMs,
+        strokes: comment.strokes ?? [],
+        body: comment.body,
+        authorType: comment.authorType,
+        authorLabel: comment.authorLabel,
+        editedAt: comment.editedAt,
+        createdAt: comment.createdAt,
+        canDelete: owned,
+        canEdit: owned,
+      };
+      // Only STAFF callers see the owning user id (client views never need it).
+      return isStaff ? { ...mapped, authorUserId: comment.authorUserId } : mapped;
+    });
   }
 
   /** Fire-and-forget COMMENT_NEW notification to the opposite party. */

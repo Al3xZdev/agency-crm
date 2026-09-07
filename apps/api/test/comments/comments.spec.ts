@@ -170,6 +170,10 @@ function buildMockDb() {
       const row = Object.values(userRows).find((r) => matchesWhere(r, where)) ?? null;
       return row ? filterSelect(row, select) : null;
     },
+    findFirst: ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      const row = Object.values(userRows).find((r) => matchesWhere(r, where)) ?? null;
+      return row ? filterSelect(row, select) : null;
+    },
     findMany: ({ where, select }: { where?: Record<string, unknown>; select?: Record<string, unknown> }) => {
       const rows = Object.values(userRows).filter((r) => !where || matchesWhere(r, where));
       return rows.map((r) => filterSelect(r, select));
@@ -182,7 +186,7 @@ function buildMockDb() {
 
   const commentDelegate = {
     create: ({ data }: { data: Record<string, unknown> }) => {
-      const row = { id: `cm_${comments.size + 1}`, createdAt: new Date(), ...data };
+      const row = { id: `cm_${comments.size + 1}`, createdAt: new Date(), removedAt: null, ...data };
       comments.set(row.id as string, row);
       return row;
     },
@@ -197,6 +201,19 @@ function buildMockDb() {
         });
       }
       return rows.map((r) => filterSelect(r, select));
+    },
+    findFirst: ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      const row = [...comments.values()].find((r) => matchesWhere(r, where)) ?? null;
+      return row ? filterSelect(row, select) : null;
+    },
+    updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      let count = 0;
+      for (const row of [...comments.values()]) {
+        if (!matchesWhere(row, where)) continue;
+        Object.assign(row, data);
+        count++;
+      }
+      return { count };
     },
   };
 
@@ -280,6 +297,16 @@ function buildMockDb() {
         createdAt: new Date(), ...data,
       });
       return versions.get(id)!;
+    },
+    _seedComment(id: string, versionId: string, data: Record<string, unknown>) {
+      comments.set(id, {
+        id, agencyId: 'agency_1', clientId: 'client_1', versionId,
+        authorType: 'STAFF', authorUserId: null, authorLabel: 'Seeded User',
+        anchor: 'PLAIN', posX: null, posY: null, startMs: null, endMs: null,
+        strokes: [], body: 'Seeded comment body', createdAt: new Date(), removedAt: null,
+        ...data,
+      });
+      return comments.get(id)!;
     },
     $extends: null as unknown,
     $transaction: async <T>(fn: (tx: typeof db) => Promise<T>): Promise<T> => fn(db),
@@ -481,5 +508,163 @@ describe('comments API (slice 7)', () => {
       .set(auth.headers)
       .send({ anchor: 'PLAIN', body: 'Ghost comment' });
     expect(res.status).toBe(404);
+  });
+
+  it('GET exposes ownership flags: own comment editable/deletable, others immutable', async () => {
+    const auth = staffAuth('ACCOUNT_MANAGER');
+    await request(app.getHttpServer())
+      .post('/versions/ver_1/comments')
+      .set('Cookie', auth.cookie)
+      .set(auth.headers)
+      .send({ anchor: 'PLAIN', body: 'My comment' });
+    // Another staff user's comment, and a client-authored one.
+    db._seedComment('cm_other', 'ver_1', { authorUserId: 'u_creative', authorLabel: 'Creative User' });
+    db._seedComment('cm_client', 'ver_1', { authorType: 'CLIENT', authorUserId: null, authorLabel: 'Acme Corp' });
+
+    const res = await request(app.getHttpServer())
+      .get('/versions/ver_1/comments')
+      .set('Cookie', auth.cookie);
+    expect(res.status).toBe(200);
+
+    const own = res.body.find((c: Record<string, unknown>) => c.id === 'cm_1');
+    expect(own.canDelete).toBe(true);
+    expect(own.canEdit).toBe(true);
+    expect(own.authorUserId).toBe('u_mgr');
+    expect(own.authorLabel).toBe('Manager User');
+
+    const other = res.body.find((c: Record<string, unknown>) => c.id === 'cm_other');
+    expect(other.canDelete).toBe(false);
+    expect(other.canEdit).toBe(false);
+    expect(other.authorUserId).toBe('u_creative');
+
+    const client = res.body.find((c: Record<string, unknown>) => c.id === 'cm_client');
+    expect(client.canDelete).toBe(false);
+    expect(client.canEdit).toBe(false);
+    expect(client.authorUserId).toBeNull();
+  });
+
+  describe('DELETE /versions/:versionId/comments/:commentId (ownership)', () => {
+    it('removes the caller\'s own STAFF comment (200)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_mine', 'ver_1', { authorUserId: 'u_mgr', authorLabel: 'Manager User' });
+
+      const res = await request(app.getHttpServer())
+        .delete('/versions/ver_1/comments/cm_mine')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true });
+      // Soft-deleted: hidden from the list, row preserved for the audit trail.
+      expect(db._comments.get('cm_mine')!['removedAt']).toBeInstanceOf(Date);
+
+      const list = await request(app.getHttpServer()).get('/versions/ver_1/comments').set('Cookie', auth.cookie);
+      expect(list.body.map((c: Record<string, unknown>) => c.id)).not.toContain('cm_mine');
+    });
+
+    it('forbids removing another staff user\'s comment (403)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_other', 'ver_1', { authorUserId: 'u_creative', authorLabel: 'Creative User' });
+
+      const res = await request(app.getHttpServer())
+        .delete('/versions/ver_1/comments/cm_other')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(res.status).toBe(403);
+      expect(db._comments.get('cm_other')!['removedAt']).toBeNull();
+    });
+
+    it('forbids removing a client-authored comment (403)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_client', 'ver_1', { authorType: 'CLIENT', authorUserId: null, authorLabel: 'Acme Corp' });
+
+      const res = await request(app.getHttpServer())
+        .delete('/versions/ver_1/comments/cm_client')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when the comment does not exist', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      const res = await request(app.getHttpServer())
+        .delete('/versions/ver_1/comments/cm_ghost')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('PATCH /versions/:versionId/comments/:commentId (ownership)', () => {
+    it('rewrites the caller\'s own STAFF comment body and stamps editedAt (200)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_mine', 'ver_1', { authorUserId: 'u_mgr', authorLabel: 'Manager User', anchor: 'RANGE', startMs: 1000, endMs: 5000 });
+
+      const res = await request(app.getHttpServer())
+        .patch('/versions/ver_1/comments/cm_mine')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ body: 'Reworded take' });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: 'cm_mine',
+        body: 'Reworded take',
+        canDelete: true,
+        canEdit: true,
+        authorUserId: 'u_mgr',
+      });
+      expect(res.body.editedAt).toBeDefined();
+      // Anchor payload is immutable — the PATCH cannot touch it.
+      expect(res.body.anchor).toBe('RANGE');
+      expect(res.body.startMs).toBe(1000);
+      expect(db._comments.get('cm_mine')!['body']).toBe('Reworded take');
+      expect(db._comments.get('cm_mine')!['editedAt']).toBeInstanceOf(Date);
+    });
+
+    it('forbids editing another staff user\'s comment (403)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_other', 'ver_1', { authorUserId: 'u_creative', authorLabel: 'Creative User' });
+
+      const res = await request(app.getHttpServer())
+        .patch('/versions/ver_1/comments/cm_other')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ body: 'Hijacked' });
+      expect(res.status).toBe(403);
+      expect(db._comments.get('cm_other')!['body']).toBe('Seeded comment body');
+    });
+
+    it('forbids editing a client-authored comment (403)', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_client', 'ver_1', { authorType: 'CLIENT', authorUserId: null, authorLabel: 'Acme Corp' });
+
+      const res = await request(app.getHttpServer())
+        .patch('/versions/ver_1/comments/cm_client')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ body: 'Edited by staff' });
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 400 for an empty/whitespace body', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      db._seedComment('cm_mine', 'ver_1', { authorUserId: 'u_mgr', authorLabel: 'Manager User' });
+
+      const res = await request(app.getHttpServer())
+        .patch('/versions/ver_1/comments/cm_mine')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ body: '   ' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 when the comment does not exist', async () => {
+      const auth = staffAuth('ACCOUNT_MANAGER');
+      const res = await request(app.getHttpServer())
+        .patch('/versions/ver_1/comments/cm_ghost')
+        .set('Cookie', auth.cookie)
+        .set(auth.headers)
+        .send({ body: 'Ghost edit' });
+      expect(res.status).toBe(404);
+    });
   });
 });

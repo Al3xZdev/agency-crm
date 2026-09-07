@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
+import type { UpdateCommentDto } from '@agency-crm/shared';
+import type { Principal } from '../tenancy/request-context.als';
 import { TenancyService } from '../tenancy/tenancy.service';
 
 @Injectable()
@@ -92,16 +94,79 @@ export class VersionsService {
   /**
    * Staff-only comment removal (cleanup capability). Soft-deletes the comment
    * to respect the append-only audit invariant (DB triggers forbid physical
-   * DELETE/UPDATE on Comment rows).
+   * DELETE/UPDATE on Comment rows). STAFF callers may only remove their OWN
+   * STAFF-authored comments; client-authored messages are immutable.
    */
-  async removeComment(versionId: string, commentId: string): Promise<{ ok: true }> {
+  async removeComment(versionId: string, commentId: string, principal: Principal): Promise<{ ok: true }> {
+    if (principal.kind !== 'STAFF' || principal.userId == null) throw new ForbiddenException();
     const db = this.tenancy.scoped();
+
+    const existing = await db.comment.findFirst({
+      where: { id: commentId, versionId, removedAt: null },
+      select: { id: true, authorType: true, authorUserId: true },
+    });
+    if (!existing) throw new NotFoundException();
+    if (existing.authorType !== 'STAFF' || existing.authorUserId !== principal.userId) {
+      throw new ForbiddenException();
+    }
+
     const updated = await db.comment.updateMany({
       where: { id: commentId, versionId },
       data: { removedAt: new Date() },
     });
     if (updated.count === 0) throw new NotFoundException();
     return { ok: true };
+  }
+
+  /**
+   * Staff-only comment edit: the owning staff user rewrites the `body` of
+   * their own comment (anchor payload stays immutable; `editedAt` records the
+   * rewrite). The append-only DB trigger only permits body/editedAt/removedAt
+   * mutations, so this is the only data path that can change a comment.
+   */
+  async updateComment(versionId: string, commentId: string, dto: UpdateCommentDto, principal: Principal) {
+    if (principal.kind !== 'STAFF' || principal.userId == null) throw new ForbiddenException();
+    const db = this.tenancy.scoped();
+
+    const existing = await db.comment.findFirst({
+      where: { id: commentId, versionId, removedAt: null },
+      select: { id: true, authorType: true, authorUserId: true },
+    });
+    if (!existing) throw new NotFoundException();
+    if (existing.authorType !== 'STAFF' || existing.authorUserId !== principal.userId) {
+      throw new ForbiddenException();
+    }
+
+    await db.comment.updateMany({
+      where: { id: commentId, versionId },
+      data: { body: dto.body, editedAt: new Date() },
+    });
+
+    const updated = await db.comment.findFirst({
+      where: { id: commentId, versionId },
+      select: {
+        id: true,
+        anchor: true,
+        posX: true,
+        posY: true,
+        startMs: true,
+        endMs: true,
+        strokes: true,
+        body: true,
+        authorType: true,
+        authorUserId: true,
+        authorLabel: true,
+        editedAt: true,
+        createdAt: true,
+      },
+    });
+    if (!updated) throw new NotFoundException();
+    return {
+      ...updated,
+      strokes: updated.strokes ?? [],
+      canDelete: true,
+      canEdit: true,
+    };
   }
 
   /**
