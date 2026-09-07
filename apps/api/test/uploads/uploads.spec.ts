@@ -33,9 +33,10 @@ const TENANT_MODEL_NAMES: Record<string, string> = {
   session: 'Session',
 };
 
-const PNG_BYTES = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-]);
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 function sha256hex(v: string | Buffer): string {
   return createHash('sha256').update(v).digest('hex');
@@ -133,6 +134,17 @@ function buildMockDb() {
       },
       count: ({ where }: { where?: Record<string, unknown> }) =>
         [...map.values()].filter((r) => !where || matchesWhere(r, where)).length,
+      updateMany: ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        const targets = [...map.values()].filter((r) => matchesWhere(r, where));
+        for (const row of targets) Object.assign(row, data);
+        return { count: targets.length };
+      },
     };
   }
 
@@ -181,6 +193,8 @@ function buildMockDb() {
     // Tenancy injects {AND:[scope, original]} — resolve through the matcher.
     findUnique: ({ where }: { where: Record<string, unknown> }) =>
       [...assets.values()].find((r) => matchesWhere(r, where)) ?? null,
+    findFirst: ({ where }: { where: Record<string, unknown> }) =>
+      [...assets.values()].find((r) => matchesWhere(r, where)) ?? null,
     create: ({ data, select }: { data: Record<string, unknown>; select?: object }) => {
       const row = { id: `as_${assets.size + 1}`, createdAt: new Date(), refCount: 1, ...data };
       assets.set(row.id as string, row);
@@ -204,6 +218,21 @@ function buildMockDb() {
         row.refCount = ((row.refCount as number) ?? 0) + data.refCount.increment;
       }
       return row;
+    },
+    updateMany: ({
+      where,
+      data,
+    }: {
+      where: Record<string, unknown>;
+      data: { refCount?: { increment: number } };
+    }) => {
+      const targets = [...assets.values()].filter((r) => matchesWhere(r, where));
+      for (const row of targets) {
+        if (data.refCount && typeof data.refCount.increment === 'number') {
+          row.refCount = ((row.refCount as number) ?? 0) + data.refCount.increment;
+        }
+      }
+      return { count: targets.length };
     },
   };
 

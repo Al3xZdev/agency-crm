@@ -123,6 +123,10 @@ function buildMockDb() {
       const row = Object.values(userRows).find((r) => matchesWhere(r, where)) ?? null;
       return row ? filterSelect(row, select) : null;
     },
+    findFirst: ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
+      const row = Object.values(userRows).find((r) => matchesWhere(r, where)) ?? null;
+      return row ? filterSelect(row, select) : null;
+    },
     findMany: ({ where, select }: { where: Record<string, unknown>; select?: Record<string, unknown> }) => {
       return Object.values(userRows)
         .filter((r) => matchesWhere(r, where))
@@ -217,6 +221,15 @@ function buildMockDb() {
       }
       Object.assign(row, data);
       return row;
+    },
+    updateMany: ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      let count = 0;
+      for (const row of emailMessages.values()) {
+        if (!matchesWhere(row, where)) continue;
+        Object.assign(row, data);
+        count++;
+      }
+      return { count };
     },
   };
 

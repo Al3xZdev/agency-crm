@@ -227,8 +227,8 @@ describe('staff auth (slice 2)', () => {
   });
 
   it('uses __Host-csrf with Secure only in production policy', () => {
-    expect(cookiePolicy('production')).toMatchObject({ secure: true, csrfName: '__Host-csrf' });
-    expect(cookiePolicy('development').csrfName).toBe('agency_csrf');
+    expect(cookiePolicy({ NODE_ENV: 'production' })).toMatchObject({ secure: true, csrfName: '__Host-csrf' });
+    expect(cookiePolicy({ NODE_ENV: 'development' }).csrfName).toBe('agency_csrf');
   });
 
   it('rejects unsafe requests missing the CSRF pair with 403 and touches nothing', async () => {

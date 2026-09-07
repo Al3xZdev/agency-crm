@@ -129,11 +129,11 @@ describe('applyOperation matrix (RED harness for container run)', () => {
     } }, client)).toThrow(/nested relation write/);
     expect(() => applyOperation('Campaign', 'update', {
       where: { id: 'k' }, data: { creatives: { create: {} } },
-    }, staff)).toThrow(/nested relation write/);
+    }, staff)).toThrow(/is unsupported through the scoped layer/);
   });
 
   it('forbids upsert and raw operations through the scoped layer', () => {
-    expect(() => applyOperation('Client', 'upsert', {}, staff)).toThrow(/forbidden through the scoped layer/);
+    expect(() => applyOperation('Client', 'upsert', {}, staff)).toThrow(/is unsupported through the scoped layer/);
     expect(() => applyOperation('Client', '$queryRaw', {}, staff)).toThrow(/forbidden/);
   });
 
